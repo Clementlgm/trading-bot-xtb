@@ -15,9 +15,12 @@ COPY xapi ./xapi
 # Installation des dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Configuration des variables d'environnement
-ENV UTILISATEUR_XTB=${UTILISATEUR_XTB}
-ENV XTB_MOT_DE_PASSE=${XTB_MOT_DE_PASSE}
+# Exposition du port
 ENV PORT=8080
 
+# Configuration des variables d'environnement
+ENV XTB_USER_ID=""
+ENV XTB_PASSWORD=""
+
+# Démarrage de l'application
 CMD ["python", "bot_cloud.py"]
