@@ -14,15 +14,10 @@ COPY xapi/ ./xapi/
 
 # Installation des dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install flask gunicorn
 
 # Configuration des variables d'environnement
-ENV XTB_USER_ID=${XTB_USER_ID}
-ENV XTB_PASSWORD=${XTB_PASSWORD}
+ENV UTILISATEUR_XTB=${UTILISATEUR_XTB}
+ENV XTB_MOT_DE_PASSE=${XTB_MOT_DE_PASSE}
 ENV PORT=8080
 
-# Copie du script de démarrage
-COPY start.py .
-
-# Démarrage avec Gunicorn
-CMD exec gunicorn --bind :$PORT start:app
+CMD ["python", "bot_cloud.py"]
