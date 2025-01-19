@@ -10,7 +10,7 @@ RUN apt-get update && \
 # Copie des fichiers nécessaires
 COPY requirements.txt .
 COPY bot_cloud.py .
-COPY xapi/ ./xapi/
+COPY /xapi/ ./xapi/
 
 # Installation des dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
