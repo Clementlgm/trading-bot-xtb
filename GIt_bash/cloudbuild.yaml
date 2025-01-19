@@ -1,9 +1,9 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'gcr.io/$PROJECT_ID/trading-bot', '.']
+  args: ['build', '-t', 'gcr.io/fit-guide-448220-b5/trading-bot', '.']
   
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/$PROJECT_ID/trading-bot']
+  args: ['push', 'gcr.io/fit-guide-448220-b5/trading-bot']
   
 - name: 'gcr.io/cloud-builders/gcloud'
   args:
@@ -11,7 +11,7 @@ steps:
   - 'deploy'
   - 'trading-bot'
   - '--image'
-  - 'gcr.io/$PROJECT_ID/trading-bot'
+  - 'gcr.io/fit-guide-448220-b5/trading-bot'
   - '--platform'
   - 'managed'
   - '--region'
@@ -21,4 +21,4 @@ steps:
   - 'UTILISATEUR_XTB=${_UTILISATEUR_XTB},XTB_MOT_DE_PASSE=${_XTB_MOT_DE_PASSE}'
 
 images:
-- 'gcr.io/$PROJECT_ID/trading-bot'
+- 'gcr.io/fit-guide-448220-b5/trading-bot'
