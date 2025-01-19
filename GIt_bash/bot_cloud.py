@@ -8,6 +8,15 @@ from xapi.client import Client
 from xapi.streaming import Streaming
 import google.cloud.logging
 import logging
+import signal
+import sys
+
+def signal_handler(sig, frame):
+    logging.info("Arrêt gracieux du bot...")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Configuration des logs pour Google Cloud
 client = google.cloud.logging.Client()
