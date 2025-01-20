@@ -49,23 +49,28 @@ class XTBTradingBot:
             return False
 
     def check_account_status(self):
-        """Vérifie l'état du compte et les paramètres de trading"""
-        try:
-            cmd = {
-                "command": "getMarginLevel"
-            }
-            response = self.client.commandExecute(cmd["command"])
-            if response and 'returnData' in response:
-                margin_data = response['returnData']
-                logging.info(f"""📊 État du compte:
-                - Balance: {margin_data.get('balance', 0)}
-                - Equity: {margin_data.get('equity', 0)}
-                - Margin Free: {margin_data.get('margin_free', 0)}""")
-                return margin_data
+    """Vérifie l'état du compte et les paramètres de trading"""
+    try:
+        if not self.check_connection():
             return None
-        except Exception as e:
-            logging.error(f"❌ Erreur lors de la vérification du compte: {str(e)}")
-            return None
+
+        cmd = {
+            "command": "getMarginLevel"
+        }
+        response = self.client.commandExecute(cmd)
+        if response and 'returnData' in response:
+            margin_data = response['returnData']
+            # Log modifié pour éviter les problèmes de formatage
+            log_msg = "📊 État du compte - "
+            log_msg += f"Balance: {margin_data.get('balance', 0)}, "
+            log_msg += f"Equity: {margin_data.get('equity', 0)}, "
+            log_msg += f"Margin Free: {margin_data.get('margin_free', 0)}"
+            logging.info(log_msg)
+            return margin_data
+        return None
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de la vérification du compte: {str(e)}")
+        return None
 
     def calculate_position_size(self, entry_price, stop_loss):
         """Calcule la taille de position basée sur le risk management"""
@@ -100,91 +105,7 @@ class XTBTradingBot:
             logging.error(f"❌ Erreur dans le calcul du volume: {str(e)}")
             return self.min_volume
 
-    def execute_trade(self, signal):
-        try:
-            if not signal:
-                return
-
-            if self.position_open:
-                if not self.check_trade_status():
-                    self.position_open = False
-                    self.current_order_id = None
-                else:
-                    return
-
-            # Vérifier l'état du compte avant de trader
-            account_status = self.check_account_status()
-            if not account_status or account_status.get('margin_free', 0) <= 0:
-                logging.error("❌ Marge insuffisante pour trader")
-                return
-
-            symbol_info = self.get_symbol_info()
-            if not symbol_info:
-                logging.error("❌ Impossible d'obtenir les informations du symbole")
-                return
-
-            ask_price = float(symbol_info.get('ask', 0))
-            bid_price = float(symbol_info.get('bid', 0))
-            
-            if ask_price <= 0 or bid_price <= 0:
-                logging.error("❌ Prix invalides reçus du serveur")
-                return
-
-            # Calcul dynamique des niveaux de SL et TP basé sur la volatilité
-            atr = self.calculate_atr(self.get_historical_data())
-            sl_pips = atr * 1.5  # Stop loss à 1.5x ATR
-            tp_pips = atr * 2.0  # Take profit à 2x ATR
-
-            # Configuration du trade avec SL et TP dynamiques
-            if signal == "BUY":
-                entry_price = ask_price
-                sl_price = round(entry_price - sl_pips, 5)
-                tp_price = round(entry_price + tp_pips, 5)
-            else:  # SELL
-                entry_price = bid_price
-                sl_price = round(entry_price + sl_pips, 5)
-                tp_price = round(entry_price - tp_pips, 5)
-
-            # Calcul du volume basé sur le risk management
-            volume = self.calculate_position_size(entry_price, sl_price)
-
-            trade_cmd = {
-                "command": "tradeTransaction",
-                "arguments": {
-                    "tradeTransInfo": {
-                        "cmd": 0 if signal == "BUY" else 1,
-                        "symbol": self.symbol,
-                        "volume": volume,
-                        "type": 0,
-                        "price": entry_price,
-                        "sl": sl_price,
-                        "tp": tp_price
-                    }
-                }
-            }
-
-            logging.info(f"""🔍 Envoi de l'ordre:
-            - Type: {signal}
-            - Volume: {volume}
-            - Prix d'entrée: {entry_price}
-            - Stop Loss: {sl_price}
-            - Take Profit: {tp_price}""")
-
-            response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
-            
-            if response.get('status'):
-                order_status = self.check_trade_execution(response)
-                if order_status:
-                    self.current_order_id = response.get('returnData', {}).get('order', 0)
-                    logging.info(f"✅ Ordre exécuté avec succès - Order ID: {self.current_order_id}")
-                    self.position_open = True
-                else:
-                    logging.error("❌ L'ordre n'a pas été exécuté correctement")
-            else:
-                logging.error(f"❌ Erreur d'exécution: {response.get('errorDescr', 'Erreur inconnue')}")
-                
-        except Exception as e:
-            logging.error(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
+    def execute_trade
 
     def calculate_atr(self, df, period=14):
         """Calcule l'Average True Range pour la gestion dynamique des SL/TP"""
