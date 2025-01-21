@@ -1,25 +1,33 @@
-from flask import Flask
-import threading
-from bot_cloud import XTBTradingBot
+FROM python:3.9-slim
 
-app = Flask(__name__)
+WORKDIR /app
 
-def run_bot():
-    bot = XTBTradingBot(symbol='BITCOIN', timeframe='1h')
-    if bot.connect():
-        bot.run_strategy()
+# Installation des dépendances système
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc python3-dev libssl-dev curl && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Démarrer le bot dans un thread séparé
-bot_thread = threading.Thread(target=run_bot, daemon=True)
-bot_thread.start()
+# Copie des fichiers nécessaires
+COPY requirements.txt .
+COPY bot_cloud.py .
+COPY start.py .
+COPY xapi ./xapi
 
-@app.route('/')
-def home():
-    return 'Bot de trading en cours d\'exécution', 200
+# Installation des dépendances Python
+RUN pip install --no-cache-dir -r requirements.txt
 
-@app.route('/health')
-def health():
-    return 'OK', 200
+# Configuration des variables d'environnement
+ENV PORT=8080
+ENV XTB_USER_ID="17373384"
+ENV XTB_PASSWORD="Java090214&Clement06032005*"
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+# Exposition explicite du port
+EXPOSE 8080
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:$PORT/health || exit 1
+
+# Démarrage de l'application
+CMD ["python", "start.py"]
