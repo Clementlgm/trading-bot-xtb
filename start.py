@@ -1,29 +1,39 @@
 from flask import Flask
-import threading
 import os
 from bot_cloud import XTBTradingBot
+import threading
+import logging
+
+# Configuration du logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
 def run_bot():
-    bot = XTBTradingBot(symbol='BITCOIN', timeframe='1h')
-    if bot.connect():
-        bot.run_strategy()
+    logger.info("Démarrage du bot de trading...")
+    try:
+        bot = XTBTradingBot(symbol='BITCOIN', timeframe='1h')
+        if bot.connect():
+            logger.info("Bot connecté avec succès")
+            bot.run_strategy()
+        else:
+            logger.error("Échec de connexion du bot")
+    except Exception as e:
+        logger.error(f"Erreur dans le bot: {str(e)}")
 
 @app.route('/')
-def home():
-    return 'Bot de trading en cours d\'exécution', 200
+def root():
+    return "Trading Bot is running", 200
 
 @app.route('/health')
 def health():
-    return 'OK', 200
+    return "OK", 200
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Démarrage du bot dans un thread séparé
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
+    threading.Thread(target=run_bot, daemon=True).start()
     
-    # Définir le port depuis la variable d'environnement
-    port = int(os.getenv('PORT', '8080'))
-    # Important : démarrage du serveur Flask en dernier
-    app.run(host='0.0.0.0', port=port)
+    # Démarrage de Flask
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, debug=False)
