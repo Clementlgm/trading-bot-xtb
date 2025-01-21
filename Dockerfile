@@ -25,8 +25,8 @@ ENV XTB_PASSWORD="Java090214&Clement06032005*"
 # Exposition explicite du port
 EXPOSE 8080
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+# Healthcheck avec un délai plus long
+HEALTHCHECK --interval=60s --timeout=60s --start-period=120s --retries=5 \
     CMD curl -f http://localhost:$PORT/health || exit 1
 
 # Démarrage de l'application
