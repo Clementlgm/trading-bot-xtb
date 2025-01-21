@@ -1,0 +1,13 @@
+echo "*.docx
+*.log
+*.exe
+*.ico
+google-cloud-sdk/
+XTB_API erreur/
+install_mode
+trading_bot.py
+forex-trading-bot.py
+bot fonctionnel.py
+" > .gitignore
+
+git add .gitignore
