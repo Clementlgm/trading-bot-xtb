@@ -1,24 +1,24 @@
-FROM python:3.9-slim
-
-WORKDIR /app
-
-# Installation des d√©pendances syst√®me
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc python3-dev libssl-dev && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Copie des fichiers n√©cessaires
-COPY requirements.txt .
-COPY bot_cloud.py .
-COPY start.py .
-COPY xapi ./xapi
-
-# Installation des d√©pendances Python
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Variables d'environnement
-ENV PORT=8080
-
-# D√©marrage de l'application
-CMD ["python", "start.py"]
+FROM python:3.9-slim 
+ 
+WORKDIR /app 
+ 
+# Installation des dÇpendances systäme 
+RUN apt-get update && \ 
+    apt-get install -y --no-install-recommends gcc python3-dev libssl-dev && \ 
+    apt-get clean && \ 
+    rm -rf /var/lib/apt/lists/* 
+ 
+# Copie des fichiers nÇcessaires 
+COPY requirements.txt . 
+COPY bot_cloud.py . 
+COPY start.py . 
+COPY xapi ./xapi 
+ 
+# Installation des dÇpendances Python 
+RUN pip install --no-cache-dir -r requirements.txt 
+ 
+# Variables d'environnement 
+ENV PORT=8080 
+ 
+# DÇmarrage de l'application 
+CMD ["python", "start.py"] 
