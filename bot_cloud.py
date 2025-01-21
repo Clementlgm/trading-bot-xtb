@@ -29,24 +29,21 @@ class XTBTradingBot:
         self.risk_percentage = 0.02  # 2% de risk par trade
 
     def connect(self):
-        try:
-            self.client = Client()
-            self.client.connect()
-            response = self.client.login(self.userId, self.password)
-            
-            if response.get('status') == True:
-                self.streaming = Streaming(self.client)
-                logging.info("✅ Connecté à XTB avec succès")
-                self.last_reconnect = time.time()
-                # Vérification immédiate du compte après connexion
-                self.check_account_status()
-                return True
-            else:
-                logging.error(f"❌ Échec de connexion: {response.get('errorDescr', 'Erreur inconnue')}")
-                return False
-        except Exception as e:
-            logging.error(f"❌ Erreur de connexion: {str(e)}")
+    try:
+        logging.info("🔄 Tentative de connexion à XTB...")
+        self.client = Client()
+        self.client.connect()
+        response = self.client.login(self.userId, self.password)
+        
+        if response.get('status') == True:
+            logging.info("✅ Connecté à XTB avec succès")
+            return True
+        else:
+            logging.error(f"❌ Échec de connexion: {response.get('errorDescr', 'Erreur inconnue')}")
             return False
+    except Exception as e:
+        logging.error(f"❌ Erreur de connexion: {str(e)}")
+        return False
 
     def check_account_status(self):
     """Vérifie l'état du compte et les paramètres de trading"""
