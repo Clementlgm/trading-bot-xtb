@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 import threading
 from bot_cloud import XTBTradingBot
 import os
@@ -21,15 +21,17 @@ def home():
 def status():
     global bot
     if bot and bot.client:
-        return "Bot connected and running", 200
-    return "Bot not running or disconnected", 503
+        return jsonify({
+            "status": "connected",
+            "symbol": bot.symbol,
+            "position_open": bot.position_open
+        })
+    return jsonify({"status": "disconnected"}), 503
 
 if __name__ == "__main__":
-    # Démarrer le bot dans un thread séparé
     bot_thread = threading.Thread(target=start_bot)
     bot_thread.daemon = True
     bot_thread.start()
     
-    # Démarrer le serveur Flask
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
