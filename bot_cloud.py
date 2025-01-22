@@ -14,7 +14,7 @@ client = google.cloud.logging.Client()
 client.setup_logging()
 
 class XTBTradingBot:
-    def __init__(self, symbol='BITCOIN', timeframe='1h'):
+    def __init__(self, 'EURUSD', timeframe='1h'):
         self.userId = os.getenv('XTB_USER_ID')
         self.password = os.getenv('XTB_PASSWORD')
         self.symbol = symbol
@@ -351,7 +351,7 @@ class XTBTradingBot:
 if __name__ == "__main__":
     while True:
         try:
-            bot = XTBTradingBot(symbol='BITCOIN', timeframe='1h')
+            bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
             if bot.connect():
                 bot.run_strategy()
             else:
