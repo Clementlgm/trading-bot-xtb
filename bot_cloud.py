@@ -255,78 +255,91 @@ class XTBTradingBot:
             logging.error(f"❌ Erreur lors de la récupération des infos du symbole: {str(e)}")
             return {}
 
+
     def execute_trade(self, signal):
-        try:
-            if not signal:
-                return
+    try:
+        if not signal or self.position_open:
+            return
 
-            if self.position_open:
-                if not self.check_trade_status():
-                    self.position_open = False
-                    self.current_order_id = None
-                else:
-                    return
+        symbol_info = self.get_symbol_info()
+        if not symbol_info:
+            print("❌ Impossible d'obtenir les informations du symbole")
+            return
 
-            symbol_info = self.get_symbol_info()
-            if not symbol_info:
-                logging.error("❌ Impossible d'obtenir les informations du symbole")
-                return
+        # Get current prices and symbol properties
+        ask_price = float(symbol_info.get('ask', 0))
+        bid_price = float(symbol_info.get('bid', 0))
+        lot_min = float(symbol_info.get('lotMin', 0.01))
+        lot_step = float(symbol_info.get('lotStep', 0.01))
+        
+        if ask_price <= 0 or bid_price <= 0:
+            print("❌ Prix invalides reçus du serveur")
+            return
 
-            ask_price = float(symbol_info.get('ask', 0))
-            bid_price = float(symbol_info.get('bid', 0))
-            
-            if ask_price <= 0 or bid_price <= 0:
-                logging.error("❌ Prix invalides reçus du serveur")
-                return
+        # Calculate pip value based on symbol precision
+        precision = len(str(symbol_info.get('pipsPrecision', 5)))
+        pip_value = 1 / (10 ** precision)
 
-            # Configuration du trade avec SL et TP
-            if signal == "BUY":
-                entry_price = ask_price
-                sl_price = round(entry_price - 0.00100, 5)  # 10 pips en dessous
-                tp_price = round(entry_price + 0.00150, 5)  # 15 pips au-dessus
-            else:  # SELL
-                entry_price = bid_price
-                sl_price = round(entry_price + 0.00100, 5)  # 10 pips au-dessus
-                tp_price = round(entry_price - 0.00150, 5)  # 15 pips en dessous
+        # Set SL and TP with proper pip distances
+        if signal == "BUY":
+            entry_price = ask_price
+            sl_distance = 100 * pip_value  # 100 pips
+            tp_distance = 200 * pip_value  # 200 pips
+            sl_price = round(entry_price - sl_distance, precision)
+            tp_price = round(entry_price + tp_distance, precision)
+        else:  # SELL
+            entry_price = bid_price
+            sl_distance = 100 * pip_value  # 100 pips
+            tp_distance = 200 * pip_value  # 200 pips
+            sl_price = round(entry_price + sl_distance, precision)
+            tp_price = round(entry_price - tp_distance, precision)
 
-            trade_cmd = {
-                "command": "tradeTransaction",
-                "arguments": {
-                    "tradeTransInfo": {
-                        "cmd": 0 if signal == "BUY" else 1,
-                        "symbol": self.symbol,
-                        "volume": 0.01,
-                        "type": 0,
-                        "price": entry_price,
-                        "sl": sl_price,
-                        "tp": tp_price
-                    }
+        # Ensure minimum distance requirements are met
+        min_distance = float(symbol_info.get('spreadRaw', 0)) * 2
+        if abs(entry_price - sl_price) < min_distance:
+            sl_price = entry_price - (min_distance * 1.5) if signal == "BUY" else entry_price + (min_distance * 1.5)
+        if abs(entry_price - tp_price) < min_distance:
+            tp_price = entry_price + (min_distance * 2) if signal == "BUY" else entry_price - (min_distance * 2)
+
+        # Prepare trade command
+        trade_cmd = {
+            "command": "tradeTransaction",
+            "arguments": {
+                "tradeTransInfo": {
+                    "cmd": 0 if signal == "BUY" else 1,
+                    "symbol": self.symbol,
+                    "volume": lot_min,
+                    "type": 0,
+                    "price": entry_price,
+                    "sl": sl_price,
+                    "tp": tp_price
                 }
             }
+        }
 
-            logging.info(f"""🔍 Envoi de l'ordre:
+        print(f"""🔍 Envoi de l'ordre:
+        - Type: {signal}
+        - Prix d'entrée: {entry_price}
+        - Stop Loss: {sl_price}
+        - Take Profit: {tp_price}""")
+
+        response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
+        
+        if response.get('status'):
+            self.current_order_id = response.get('returnData', {}).get('order', 0)
+            print(f"""✅ Ordre exécuté avec succès:
+            - Order ID: {self.current_order_id}
             - Type: {signal}
-            - Prix d'entrée: {entry_price}
-            - Stop Loss: {sl_price}
-            - Take Profit: {tp_price}""")
-
-            response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
+            - Prix: {entry_price}
+            - SL: {sl_price}
+            - TP: {tp_price}""")
+            self.position_open = True
+        else:
+            print(f"❌ Erreur d'exécution: {response.get('errorDescr', 'Erreur inconnue')}")
             
-            if response.get('status'):
-                self.current_order_id = response.get('returnData', {}).get('order', 0)
-                logging.info(f"""✅ Ordre exécuté avec succès:
-                - Order ID: {self.current_order_id}
-                - Type: {signal}
-                - Prix: {entry_price}
-                - SL: {sl_price}
-                - TP: {tp_price}""")
-                self.position_open = True
-            else:
-                logging.error(f"❌ Erreur d'exécution: {response.get('errorDescr', 'Erreur inconnue')}")
-                
-        except Exception as e:
-            logging.error(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
-
+    except Exception as e:
+        print(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
+    
     def check_connection(self):
         """Vérifie la connexion au serveur"""
         try:
