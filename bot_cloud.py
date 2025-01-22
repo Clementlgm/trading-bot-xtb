@@ -12,7 +12,7 @@ import logging
 # Configuration des logs pour Google Cloud
 client = google.cloud.logging.Client()
 client.setup_logging()
-
+    
 class XTBTradingBot:
     def __init__(self, symbol='EURUSD', timeframe='1h'):
         self.userId = os.getenv('XTB_USER_ID')
@@ -379,8 +379,43 @@ class XTBTradingBot:
                 time.sleep(30)
                 self.connect()
 
+    def check_trade_status(self):
+    """Vérifie le statut des trades en cours"""
+    try:
+        if not self.current_order_id:
+            return False
+            
+        cmd = {
+            "command": "getTrades",
+            "arguments": {
+                "openedOnly": True
+            }
+        }
+        response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+        
+        if not response or 'returnData' not in response:
+            return False
+            
+        trades = response['returnData']
+        for trade in trades:
+            if trade.get('order2') == self.current_order_id:
+                return True
+                
+        return False
+        
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
+        return False
+
 if __name__ == "__main__":
     while True:
         try:
             bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
             if bot.connect():
+                bot.run_strategy()
+            else:
+                logging.error("Échec de connexion, nouvelle tentative dans 60 secondes...")
+                time.sleep(60)
+        except Exception as e:
+            logging.error(f"Erreur critique: {str(e)}")
+            time.sleep(60)
