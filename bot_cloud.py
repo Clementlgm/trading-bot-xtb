@@ -30,19 +30,23 @@ class XTBTradingBot:
 
     def connect(self):
     try:
-        logging.info("🔄 Tentative de connexion à XTB...")
+        logging.info(f"🔄 Tentative de connexion à XTB - UserID: {self.userId}")
         self.client = Client()
         self.client.connect()
         response = self.client.login(self.userId, self.password)
         
         if response.get('status') == True:
+            self.streaming = Streaming(self.client)
             logging.info("✅ Connecté à XTB avec succès")
+            logging.info(f"Détails de la réponse: {response}")
+            self.last_reconnect = time.time()
+            self.check_account_status()
             return True
         else:
-            logging.error(f"❌ Échec de connexion: {response.get('errorDescr', 'Erreur inconnue')}")
+            logging.error(f"❌ Échec de connexion - Détails: {response}")
             return False
     except Exception as e:
-        logging.error(f"❌ Erreur de connexion: {str(e)}")
+        logging.error(f"❌ Erreur de connexion - Exception: {str(e)}")
         return False
 
     def check_account_status(self):
