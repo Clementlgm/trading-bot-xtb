@@ -14,7 +14,7 @@ client = google.cloud.logging.Client()
 client.setup_logging()
 
 class XTBTradingBot:
-    def __init__(self, 'EURUSD', timeframe='1h'):
+    def __init__(self, symbol='EURUSD', timeframe='1h'):
         self.userId = os.getenv('XTB_USER_ID')
         self.password = os.getenv('XTB_PASSWORD')
         self.symbol = symbol
@@ -29,49 +29,49 @@ class XTBTradingBot:
         self.risk_percentage = 0.02  # 2% de risk par trade
 
     def connect(self):
-    try:
-        logging.info(f"🔄 Tentative de connexion à XTB - UserID: {self.userId}")
-        self.client = Client()
-        self.client.connect()
-        response = self.client.login(self.userId, self.password)
-        
-        if response.get('status') == True:
-            self.streaming = Streaming(self.client)
-            logging.info("✅ Connecté à XTB avec succès")
-            logging.info(f"Détails de la réponse: {response}")
-            self.last_reconnect = time.time()
-            self.check_account_status()
-            return True
-        else:
-            logging.error(f"❌ Échec de connexion - Détails: {response}")
+        try:
+            logging.info(f"🔄 Tentative de connexion à XTB - UserID: {self.userId}")
+            self.client = Client()
+            self.client.connect()
+            response = self.client.login(self.userId, self.password)
+            
+            if response.get('status') == True:
+                self.streaming = Streaming(self.client)
+                logging.info("✅ Connecté à XTB avec succès")
+                logging.info(f"Détails de la réponse: {response}")
+                self.last_reconnect = time.time()
+                self.check_account_status()
+                return True
+            else:
+                logging.error(f"❌ Échec de connexion - Détails: {response}")
+                return False
+        except Exception as e:
+            logging.error(f"❌ Erreur de connexion - Exception: {str(e)}")
             return False
-    except Exception as e:
-        logging.error(f"❌ Erreur de connexion - Exception: {str(e)}")
-        return False
 
     def check_account_status(self):
-    """Vérifie l'état du compte et les paramètres de trading"""
-    try:
-        if not self.check_connection():
-            return None
+        """Vérifie l'état du compte et les paramètres de trading"""
+        try:
+            if not self.check_connection():
+                return None
 
-        cmd = {
-            "command": "getMarginLevel"
-        }
-        response = self.client.commandExecute(cmd)
-        if response and 'returnData' in response:
-            margin_data = response['returnData']
-            # Log modifié pour éviter les problèmes de formatage
-            log_msg = "📊 État du compte - "
-            log_msg += f"Balance: {margin_data.get('balance', 0)}, "
-            log_msg += f"Equity: {margin_data.get('equity', 0)}, "
-            log_msg += f"Margin Free: {margin_data.get('margin_free', 0)}"
-            logging.info(log_msg)
-            return margin_data
-        return None
-    except Exception as e:
-        logging.error(f"❌ Erreur lors de la vérification du compte: {str(e)}")
-        return None
+            cmd = {
+                "command": "getMarginLevel"
+            }
+            response = self.client.commandExecute(cmd)
+            if response and 'returnData' in response:
+                margin_data = response['returnData']
+                # Log modifié pour éviter les problèmes de formatage
+                log_msg = "📊 État du compte - "
+                log_msg += f"Balance: {margin_data.get('balance', 0)}, "
+                log_msg += f"Equity: {margin_data.get('equity', 0)}, "
+                log_msg += f"Margin Free: {margin_data.get('margin_free', 0)}"
+                logging.info(log_msg)
+                return margin_data
+            return None
+        except Exception as e:
+            logging.error(f"❌ Erreur lors de la vérification du compte: {str(e)}")
+            return None
 
     def calculate_position_size(self, entry_price, stop_loss):
         """Calcule la taille de position basée sur le risk management"""
@@ -105,8 +105,6 @@ class XTBTradingBot:
         except Exception as e:
             logging.error(f"❌ Erreur dans le calcul du volume: {str(e)}")
             return self.min_volume
-
-    def execute_trade
 
     def calculate_atr(self, df, period=14):
         """Calcule l'Average True Range pour la gestion dynamique des SL/TP"""
@@ -230,6 +228,12 @@ class XTBTradingBot:
             last_row['close'] < last_row['SMA20']
         )
         
+        logging.info(f"""🔍 Analyse des signaux:
+        - SMA20: {last_row['SMA20']}
+        - SMA50: {last_row['SMA50']}
+        - RSI: {last_row['RSI']}
+        - Prix de clôture: {last_row['close']}""")
+        
         if buy_signal:
             return "BUY"
         elif sell_signal:
@@ -323,6 +327,16 @@ class XTBTradingBot:
         except Exception as e:
             logging.error(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
 
+    def check_connection(self):
+        """Vérifie la connexion au serveur"""
+        try:
+            if self.client is None:
+                return self.connect()
+            return True
+        except Exception as e:
+            logging.error(f"❌ Erreur de vérification de connexion: {str(e)}")
+            return False
+
     def run_strategy(self):
         logging.info(f"🤖 Démarrage du bot de trading sur {self.symbol}")
         
@@ -357,14 +371,3 @@ if __name__ == "__main__":
         try:
             bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
             if bot.connect():
-                bot.run_strategy()
-            else:
-                logging.info("⏳ Nouvelle tentative dans 60 secondes...")
-                time.sleep(60)
-        except KeyboardInterrupt:
-            logging.info("⛔ Arrêt du bot demandé par l'utilisateur")
-            break
-        except Exception as e:
-            logging.error(f"❌ Erreur fatale: {str(e)}")
-            logging.info("⏳ Redémarrage dans 60 secondes...")
-            time.sleep(60)
