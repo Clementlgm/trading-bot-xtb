@@ -257,7 +257,6 @@ class XTBTradingBot:
 
 
     def execute_trade(self, signal):
-    try:
         if not signal or self.position_open:
             return
 
@@ -283,25 +282,17 @@ class XTBTradingBot:
         # Set SL and TP with proper pip distances
         if signal == "BUY":
             entry_price = ask_price
-            sl_distance = 100 * pip_value  # 100 pips
-            tp_distance = 200 * pip_value  # 200 pips
+            sl_distance = 100 * pip_value
+            tp_distance = 200 * pip_value
             sl_price = round(entry_price - sl_distance, precision)
             tp_price = round(entry_price + tp_distance, precision)
         else:  # SELL
             entry_price = bid_price
-            sl_distance = 100 * pip_value  # 100 pips
-            tp_distance = 200 * pip_value  # 200 pips
+            sl_distance = 100 * pip_value
+            tp_distance = 200 * pip_value
             sl_price = round(entry_price + sl_distance, precision)
             tp_price = round(entry_price - tp_distance, precision)
 
-        # Ensure minimum distance requirements are met
-        min_distance = float(symbol_info.get('spreadRaw', 0)) * 2
-        if abs(entry_price - sl_price) < min_distance:
-            sl_price = entry_price - (min_distance * 1.5) if signal == "BUY" else entry_price + (min_distance * 1.5)
-        if abs(entry_price - tp_price) < min_distance:
-            tp_price = entry_price + (min_distance * 2) if signal == "BUY" else entry_price - (min_distance * 2)
-
-        # Prepare trade command
         trade_cmd = {
             "command": "tradeTransaction",
             "arguments": {
@@ -317,28 +308,11 @@ class XTBTradingBot:
             }
         }
 
-        print(f"""🔍 Envoi de l'ordre:
-        - Type: {signal}
-        - Prix d'entrée: {entry_price}
-        - Stop Loss: {sl_price}
-        - Take Profit: {tp_price}""")
-
         response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
         
         if response.get('status'):
             self.current_order_id = response.get('returnData', {}).get('order', 0)
-            print(f"""✅ Ordre exécuté avec succès:
-            - Order ID: {self.current_order_id}
-            - Type: {signal}
-            - Prix: {entry_price}
-            - SL: {sl_price}
-            - TP: {tp_price}""")
             self.position_open = True
-        else:
-            print(f"❌ Erreur d'exécution: {response.get('errorDescr', 'Erreur inconnue')}")
-            
-    except Exception as e:
-        print(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
     
     def check_connection(self):
         """Vérifie la connexion au serveur"""
