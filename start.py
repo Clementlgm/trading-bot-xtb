@@ -23,9 +23,7 @@ def run_trading():
         except Exception as e:
             logging.error(f"Error: {str(e)}")
 
-@app.route('/')
-def home():
-    return jsonify({"status": "ok"})
+app.route('/')(lambda: jsonify({"status": "ok"}))
 
 @app.route('/status')
 def check_status():
@@ -39,6 +37,5 @@ def check_status():
         "connected": bot.client is not None if bot else False
     })
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+port = int(os.environ.get("PORT", 8080))
+app = app.wsgi_app
