@@ -1,11 +1,10 @@
-from flask import Flask
+from flask import Flask, jsonify
 import os, logging, threading, time
 from bot_cloud import XTBTradingBot
-from logging_config import setup_logging
+import google.cloud.logging
 
-# Setup logging
-setup_logging()
-logger = logging.getLogger(__name__)
+client = google.cloud.logging.Client()
+client.setup_logging()
 
 app = Flask(__name__)
 bot = None
@@ -16,38 +15,45 @@ def run_bot():
     while True:
         try:
             if bot and bot.connect():
-                logger.info("🤖 Bot connected - starting trading strategy")
+                logging.info("🤖 Bot connecté - démarrage trading")
                 bot.run_strategy()
             else:
-                logger.error("❌ Bot connection failed - retrying in 60s")
+                logging.error("❌ Échec connexion - retry dans 60s")
                 time.sleep(60)
         except Exception as e:
-            logger.error(f"❌ Bot error: {str(e)}")
+            logging.error(f"❌ Erreur bot: {str(e)}")
             time.sleep(60)
-
-def init_bot():
-    global bot, bot_thread
-    try:
-        logger.info("🔄 Initializing trading bot...")
-        bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
-        
-        if not bot_thread or not bot_thread.is_alive():
-            bot_thread = threading.Thread(target=run_bot, daemon=True)
-            bot_thread.start()
-            logger.info("✅ Bot thread started")
-    except Exception as e:
-        logger.error(f"❌ Init error: {str(e)}")
 
 @app.route('/')
 def home():
     global bot, bot_thread
-    status = "running" if bot and bot_thread and bot_thread.is_alive() else "stopped"
-    if status == "stopped":
-        init_bot()
-    logger.info(f"📊 Bot status: {status}")
-    return {"status": status}, 200
+    if not bot or not bot_thread or not bot_thread.is_alive():
+        try:
+            logging.info("🔄 Initialisation bot...")
+            bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
+            bot_thread = threading.Thread(target=run_bot, daemon=True)
+            bot_thread.start()
+            logging.info("✅ Bot démarré")
+        except Exception as e:
+            logging.error(f"❌ Erreur initialisation: {str(e)}")
+    return jsonify({"status": "running" if bot_thread and bot_thread.is_alive() else "stopped"})
+
+@app.route('/status')
+def status():
+    global bot
+    if bot:
+        try:
+            account_info = bot.check_account_status()
+            return jsonify({
+                "status": "running",
+                "account": account_info,
+                "connected": bot.client is not None
+            })
+        except Exception as e:
+            logging.error(f"❌ Erreur status: {str(e)}")
+            return jsonify({"status": "error", "message": str(e)})
+    return jsonify({"status": "not_initialized"})
 
 if __name__ == "__main__":
-    init_bot()
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
