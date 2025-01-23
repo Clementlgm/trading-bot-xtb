@@ -5,45 +5,47 @@ import google.cloud.logging
 
 client = google.cloud.logging.Client()
 client.setup_logging()
-logging.getLogger().setLevel(logging.INFO)
 
 app = Flask(__name__)
 bot = None
 bot_thread = None
 
-def run_trading():
+def run_bot():
     global bot
-    logging.info("Starting trading bot")
-    bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
     while True:
         try:
-            if bot.connect():
-                logging.info("Connected to XTB")
-                bot.run_strategy()
-            time.sleep(30)
+            logging.info("Starting trading bot...")
+            if not bot.check_connection():
+                logging.error("Connection failed")
+                time.sleep(30)
+                continue
+            bot.run_strategy()
         except Exception as e:
-            logging.error(f"Trading error: {e}")
+            logging.error(f"Bot error: {str(e)}")
             time.sleep(30)
 
 @app.route('/')
 def home():
-    global bot_thread
-    if not bot_thread or not bot_thread.is_alive():
-        bot_thread = threading.Thread(target=run_trading, daemon=True)
-        bot_thread.start()
-        logging.info("Started bot thread")
-    return "Bot running"
+    global bot, bot_thread
+    try:
+        if not bot:
+            bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
+        if not bot_thread or not bot_thread.is_alive():
+            bot_thread = threading.Thread(target=run_bot, daemon=True)
+            bot_thread.start()
+        return jsonify({"status": "running"})
+    except Exception as e:
+        logging.error(f"Error: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)})
 
-@app.route('/status', methods=['GET'])
-def check_status():
+@app.route('/status')
+def status():
     global bot
-    if not bot:
-        return jsonify({"status": "not running"})
     return jsonify({
-        "status": "running",
-        "thread_alive": bot_thread.is_alive() if bot_thread else False
+        "status": "running" if bot and bot_thread and bot_thread.is_alive() else "stopped",
+        "connected": bool(bot and bot.client is not None) if bot else False
     })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port)
