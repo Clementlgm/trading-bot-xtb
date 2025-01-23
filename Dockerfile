@@ -8,9 +8,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-COPY *.py .
-COPY xapi/ ./xapi/
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python", "start.py"]
+COPY . .
+
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
+
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 start:app
