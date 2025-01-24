@@ -1,36 +1,37 @@
 from flask import Flask, jsonify
-import os, logging, threading
+import os, logging
 from bot_cloud import XTBTradingBot
 import google.cloud.logging
+from threading import Thread
 
 client = google.cloud.logging.Client()
 client.setup_logging()
-logging.getLogger().setLevel(logging.INFO)
 
 app = Flask(__name__)
 bot = None
-bot_thread = None
+trade_thread = None
 
-@app.route('/')
+def run_trading():
+    global bot
+    if bot and bot.connect():
+        bot.run_strategy()
+
+@app.route("/", methods=['GET'])
 def home():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "running"})
 
-@app.route('/status')
+@app.route("/status", methods=['GET'])
 def status():
-    global bot, bot_thread
-    try:
-        if not bot:
-            bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
-            bot_thread = threading.Thread(target=bot.run_strategy, daemon=True)
-            bot_thread.start()
-        return jsonify({
-            "status": "running",
-            "connected": bot.client is not None
-        })
-    except Exception as e:
-        logging.error(f"Error: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)})
+    global bot, trade_thread
+    if not bot:
+        bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
+        trade_thread = Thread(target=run_trading, daemon=True)
+        trade_thread.start()
+    
+    return jsonify({
+        "status": "active",
+        "connected": bool(bot and bot.client)
+    })
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
