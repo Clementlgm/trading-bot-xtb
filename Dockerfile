@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+echo "FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -15,4 +15,4 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
 
-CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 'start:app'
+CMD gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 0 'start:app'" > Dockerfile
