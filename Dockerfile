@@ -2,18 +2,20 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
+# Install build dependencies
 RUN apt-get update && \
-   apt-get install -y --no-install-recommends gcc python3-dev libssl-dev && \
-   apt-get clean && \
-   rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends gcc python3-dev libssl-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
+# Install Python packages
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY xapi/__init__.py xapi/
-COPY xapi/client.py xapi/
-COPY xapi/streaming.py xapi/
+# Copy application files
 COPY bot_cloud.py .
+COPY client.py .
+COPY streaming.py .
 COPY start.py .
 
 ENV PYTHONUNBUFFERED=1
