@@ -509,7 +509,7 @@ class XTBTradingBot:
                 self.connect()
 
     def check_trade_status(self):
-    """Vérifie le statut des trades en cours"""
+    """Check trade status"""  # En anglais pour éviter les problèmes d'encodage
     try:
         if not self.current_order_id:
             return False
