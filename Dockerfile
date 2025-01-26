@@ -7,13 +7,14 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Installer les dépendances
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier d'abord le dossier xapi
-COPY xapi /app/xapi
-COPY bot_cloud.py .
+# Copier les fichiers d'application
+COPY xapi/ /app/xapi/
 COPY start.py .
+COPY bot_cloud.py .
 
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
