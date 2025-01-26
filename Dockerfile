@@ -13,10 +13,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY xapi/bot_cloud.py .
-COPY xapi/client.py .
-COPY xapi/streaming.py .
-COPY xapi/start.py .
+COPY bot_cloud.py .
+COPY client.py .
+COPY streaming.py .
+COPY start.py .
 
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
