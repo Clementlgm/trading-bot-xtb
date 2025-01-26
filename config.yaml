@@ -4,7 +4,7 @@ credentials:
     password: "Java090214&Clement06032005*"  # Remplacez par votre mot de passe XTB
 
 trading:
-    symbol: "EURUSD"
+    symbol: "BITCOIN"
     timeframe: "1h"
     volume: 0.01
     max_positions: 3

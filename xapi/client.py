@@ -28,7 +28,7 @@ class Client(object):
             context.verify_mode = ssl.CERT_NONE
             self.sock = context.wrap_socket(self.sock)
             self.sock.connect((server, port))
-            self.sock.settimeout(10.0)
+            self.sock.settimeout(30.0)
             logger.info('Connected to XTB demo server')
         except Exception as e:
             logger.error(f'Connection error: {str(e)}')
