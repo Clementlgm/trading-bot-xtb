@@ -26,14 +26,12 @@ def run_trading():
             time.sleep(30)
 
 @app.route("/")
-def root():
+def root():  # Renommé de home() à root()
     return jsonify({"status": "running"})
 
 @app.route("/status")
 def get_status():
     global bot
-    if not bot:
-        init_bot()
     return jsonify({
         "status": "connected" if bot and bot.client else "disconnected",
         "account_info": bot.check_account_status() if bot else None
