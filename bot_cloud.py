@@ -352,27 +352,32 @@ class XTBTradingBot:
            logging.error(f"❌ Échec de l'exécution du trade: {response}")
 
    def check_trade_status(self):
-       try:
-           if not self.current_order_id:
-               return False
-           
-           cmd = {
-               "command": "getTrades",
-               "arguments": {
-                   "openedOnly": True
-               }
-           }
-           response = self.client.commandExecute(cmd["command"], cmd["arguments"])
-       
-           if not response or 'returnData' not in response:
-               return False
-           
-           trades = response['returnData']
-           return any(trade.get('order2') == self.current_order_id for trade in trades)
-       
-       except Exception as e:
-           logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
-           return False
+    """Vérifie le statut des trades en cours"""
+    try:
+        if not self.current_order_id:
+            return False
+            
+        cmd = {
+            "command": "getTrades",
+            "arguments": {
+                "openedOnly": True
+            }
+        }
+        response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+        
+        if not response or 'returnData' not in response:
+            return False
+            
+        trades = response['returnData']
+        for trade in trades:
+            if trade.get('order2') == self.current_order_id:
+                return True
+                
+        return False
+        
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
+        return False
 
    def run_strategy(self):
     logging.info(f"🤖 Bot trading {self.symbol}")
