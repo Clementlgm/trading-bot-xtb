@@ -7,10 +7,16 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Copier d'abord les fichiers de dépendances
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+# Copier les fichiers Python spécifiques
+COPY bot_cloud.py .
+COPY client.py .
+COPY streaming.py .
+COPY start.py .
+COPY __init__.py .
 
 ENV PORT=8080
 ENV PYTHONUNBUFFERED=1
