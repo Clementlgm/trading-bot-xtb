@@ -14,8 +14,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY bot_cloud.py .
-COPY client.py .
-COPY streaming.py .
+COPY xapi/client.py .
+COPY xapi/streaming.py .
 COPY start.py .
 
 ENV PYTHONUNBUFFERED=1
