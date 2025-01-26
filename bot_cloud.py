@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from xapi.client import Client
 from xapi.streaming import Streaming
 from dotenv import load_dotenv
@@ -352,7 +353,7 @@ class XTBTradingBot:
            logging.error(f"❌ Échec de l'exécution du trade: {response}")
 
    def check_trade_status(self):
-    """Vérifie le statut des trades en cours"""
+    #"""Vérifie le statut des trades en cours"""
     try:
         if not self.current_order_id:
             return False
