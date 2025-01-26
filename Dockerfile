@@ -2,19 +2,17 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
+# Install build dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc python3-dev libssl-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Installer les dépendances
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy all application files
+COPY . .
 
-# Copier les fichiers d'application
-COPY xapi/ /app/xapi/
-COPY start.py .
-COPY bot_cloud.py .
+# Install dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
