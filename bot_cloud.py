@@ -509,32 +509,33 @@ class XTBTradingBot:
                 self.connect()
 
     def check_trade_status(self):
-    """Check trade status"""
-    try:
-        if not self.current_order_id:
-            return False
+        """Check trade status"""
+        try:
+        
+            if not self.current_order_id:
+                return False
             
-        cmd = {
-            "command": "getTrades",
-            "arguments": {
-                "openedOnly": True
+            cmd = {
+                "command": "getTrades",
+                "arguments": {
+                    "openedOnly": True
+                }
             }
-        }
-        response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+            response = self.client.commandExecute(cmd["command"], cmd["arguments"])
         
-        if not response or 'returnData' not in response:
-            return False
+            if not response or 'returnData' not in response:
+                return False
             
-        trades = response['returnData']
-        for trade in trades:
-            if trade.get('order2') == self.current_order_id:
-                return True
+            trades = response['returnData']
+            for trade in trades:
+                if trade.get('order2') == self.current_order_id:
+                    return True
                 
-        return False
+            return False
         
-    except Exception as e:
-        logging.error(f"Erreur lors de la vérification du trade: {str(e)}")
-        return False
+        except Exception as e:
+            logging.error(f"Erreur lors de la vérification du trade: {str(e)}")
+            return False
 
 if __name__ == "__main__":
     while True:
