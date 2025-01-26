@@ -12,6 +12,8 @@ import os, logging
 from bot_cloud import XTBTradingBot
 import google.cloud.logging
 from threading import Thread
+from dotenv import load_dotenv
+load_dotenv()
 
 client = google.cloud.logging.Client()
 client.setup_logging()

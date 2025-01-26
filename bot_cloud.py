@@ -509,7 +509,7 @@ class XTBTradingBot:
                 self.connect()
 
     def check_trade_status(self):
-    """Check trade status"""  # En anglais pour éviter les problèmes d'encodage
+    """Check trade status"""
     try:
         if not self.current_order_id:
             return False
@@ -533,7 +533,7 @@ class XTBTradingBot:
         return False
         
     except Exception as e:
-        logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
+        logging.error(f"Erreur lors de la vérification du trade: {str(e)}")
         return False
 
 if __name__ == "__main__":
