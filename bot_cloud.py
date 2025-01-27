@@ -70,9 +70,7 @@ class XTBTradingBot:
     try:
         if self.client is None:
             return self.connect()
-        
-        response = self.client.commandExecute("ping")
-        return response and response.get('status')
+        return self.client.ping()
     except Exception as e:
         logging.error(f"❌ Erreur de vérification de connexion: {str(e)}")
         return False
