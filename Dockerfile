@@ -8,16 +8,8 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Create required directories first
-RUN mkdir -p /app/xapi
-
-# Copy files in correct order
-COPY requirements.txt .
-COPY start.py .
-COPY bot_cloud.py .
-COPY xapi/client.py xapi/
-COPY xapi/streaming.py xapi/
-COPY xapi/__init__.py xapi/
+# Copy everything at once
+COPY . .
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
