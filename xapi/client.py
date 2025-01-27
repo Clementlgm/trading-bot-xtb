@@ -1,8 +1,6 @@
 import json
-import socket
 import logging
-import time
-import ssl
+import websocket
 from threading import Thread
 
 logging.basicConfig(level=logging.INFO)
@@ -18,18 +16,15 @@ class Client(object):
 
     def connect(self, server='xapi.xtb.com', port=5124):
         try:
-            # Configuration spécifique pour le serveur démo avec l'IP directe
-            server = 'xapi.xtb.com'  # Adresse IP du serveur démo XTB
-            port = 5124  # Port standard pour le démo
-            
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
-            self.sock = context.wrap_socket(self.sock)
-            self.sock.connect((server, port))
+            logger.info("Connecting to XTB websocket...")
+            # Utilisation de websocket au lieu de socket SSL
+            self.sock = websocket.create_connection(
+                "wss://ws.xtb.com/demo",
+                sslopt={"cert_reqs": 0}
+            )
             self.sock.settimeout(30.0)
             logger.info('Connected to XTB demo server')
+            return True
         except Exception as e:
             logger.error(f'Connection error: {str(e)}')
             raise
@@ -59,8 +54,7 @@ class Client(object):
         
         try:
             cmd = json.dumps(dictionary)
-            cmd = cmd.encode('utf-8')
-            self.sock.send(cmd + b'\n')
+            self.sock.send(cmd)
             return self._read_response()
         except Exception as e:
             logger.error(f'Send command error: {str(e)}')
@@ -71,27 +65,13 @@ class Client(object):
             raise ConnectionError("Not connected to XTB server")
         
         try:
-            buffer = bytearray()
-            while True:
-                chunk = self.sock.recv(4096)
-                if not chunk:
-                    break
+            response = self.sock.recv()
+            if response:
+                return json.loads(response)
+            raise ConnectionError("Empty response from server")
                 
-                buffer.extend(chunk)
-                
-                if b'\n' in buffer:
-                    try:
-                        response = buffer.decode('utf-8').strip()
-                        return json.loads(response)
-                    except json.JSONDecodeError as e:
-                        logger.error(f'JSON decode error: {str(e)}, Response: {response}')
-                        raise
-            
-            if not buffer:
-                raise ConnectionError("Empty response from server")
-                
-        except socket.timeout:
-            logger.error('Socket timeout while reading response')
+        except websocket.WebSocketTimeoutException:
+            logger.error('WebSocket timeout while reading response')
             raise
         except Exception as e:
             logger.error(f'Read response error: {str(e)}')
