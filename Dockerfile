@@ -8,8 +8,12 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy all application files
-COPY . .
+# Create xapi directory and copy files
+RUN mkdir -p /app/xapi
+
+# Copy Python files
+COPY start.py bot_cloud.py requirements.txt ./
+COPY xapi/*.py ./xapi/
 
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
