@@ -1,52 +1,53 @@
+import logging
+import time
+import json
+import os
 from xapi.client import Client
 from xapi.streaming import Streaming
 from dotenv import load_dotenv
 import pandas as pd
 import numpy as np
-import logging
-import time
-import json
-import os
 
+# Configuration du logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('trading.log'),
-        logging.StreamHandler()
+        logging.StreamHandler()  # Utilise uniquement StreamHandler au lieu de FileHandler
     ]
 )
 
-# Configuration logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger('trading_bot')
 
+# Setup Google Cloud Logging si disponible
 try:
-   import google.cloud.logging
-   client = google.cloud.logging.Client()
-   client.setup_logging()
-except:
-   pass
-
-load_dotenv()
+    import google.cloud.logging
+    client = google.cloud.logging.Client()
+    client.setup_logging()
+    logger.info("Google Cloud Logging configured successfully")
+except Exception as e:
+    logger.warning(f"Could not setup Google Cloud Logging: {e}")
 
 class XTBTradingBot:
-   def __init__(self, symbol='BITCOIN', timeframe='1h'):
-       load_dotenv()
-       self.userId = os.getenv('XTB_USER_ID')
-       self.password = os.getenv('XTB_PASSWORD')
-       if not self.userId or not self.password:
-           raise ValueError("XTB_USER_ID et XTB_PASSWORD doivent être définis dans .env")
-       self.symbol = symbol
-       self.timeframe = timeframe
-       self.client = None
-       self.streaming = None
-       self.position_open = False
-       self.current_order_id = None
-       self.last_reconnect = time.time()
-       self.reconnect_interval = 60
-       self.min_volume = 0.001
-       self.risk_percentage = 0.01
+    def __init__(self, symbol='BITCOIN', timeframe='1h'):
+        load_dotenv()
+        self.userId = os.getenv('XTB_USER_ID')
+        self.password = os.getenv('XTB_PASSWORD')
+        if not self.userId or not self.password:
+            self.userId = os.environ.get('XTB_USER_ID')
+            self.password = os.environ.get('XTB_PASSWORD')
+        if not self.userId or not self.password:
+            raise ValueError("XTB_USER_ID and XTB_PASSWORD must be set")
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.client = None
+        self.streaming = None
+        self.position_open = False
+        self.current_order_id = None
+        self.last_reconnect = time.time()
+        self.reconnect_interval = 60
+        self.min_volume = 0.001
+        self.risk_percentage = 0.01
 
    def connect(self):
     try:
