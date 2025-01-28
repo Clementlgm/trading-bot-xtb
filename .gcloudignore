@@ -1,0 +1,18 @@
+# Ignore everything
+*
+
+# Then explicitly allow only what we need
+!start.py
+!bot_cloud.py
+!requirements.txt
+!Dockerfile
+!cloudbuild.yaml
+!xapi/
+!xapi/__init__.py
+!xapi/client.py
+!xapi/streaming.py
+
+# Explicitly ignore large directories
+google-cloud-sdk/
+XTB_API erreur/
+__pycache__/
