@@ -1,5 +1,4 @@
-flask
-Flask==1.1.2
+flask==1.1.2
 flask-cors
 gunicorn
 pandas>=1.5.0
