@@ -120,135 +120,135 @@ class XTBTradingBot:
            return None
 
    def calculate_indicators(self, df):
-    try:
-        df = df.copy()
-        # Calculer juste la tendance sur les 3 dernières bougies
-        df['price_change'] = df['close'].diff()
-        df['trend'] = df['price_change'].rolling(window=3).mean()
-        return df
-    except Exception as e:
-        logging.error(f"❌ Erreur lors du calcul des indicateurs: {str(e)}")
-        return None
+        try:
+            df = df.copy()
+            # Calculer juste la tendance sur les 3 dernières bougies
+            df['price_change'] = df['close'].diff()
+            df['trend'] = df['price_change'].rolling(window=3).mean()
+            return df
+        except Exception as e:
+            logging.error(f"❌ Erreur lors du calcul des indicateurs: {str(e)}")
+            return None
 
-def check_trading_signals(self, df):
-    if len(df) < 3:  # On a besoin de minimum 3 bougies
-        return None
+   def check_trading_signals(self, df):
+        if len(df) < 3:  # On a besoin de minimum 3 bougies
+            return None
     
-    last_row = df.iloc[-1]
-    trend = last_row['trend']
+        last_row = df.iloc[-1]
+        trend = last_row['trend']
     
-    logging.info(f"""
-    ===== Vérification des conditions d'entrée =====
-    Tendance actuelle: {trend}
-    Prix actuel: {last_row['close']}
-    """)
-    
-    # Si aucune position n'est ouverte
-    if not self.position_open:
-        # Si la tendance est positive -> BUY
-        if trend > 0:
-            logging.info("🔵 Signal d'achat détecté - Tendance positive")
-            return "BUY"
-        # Si la tendance est négative -> SELL
-        elif trend < 0:
-            logging.info("🔴 Signal de vente détecté - Tendance négative")
-            return "SELL"
-    
-    return None
-
-def execute_trade(self, signal):
-    if not signal or self.position_open:
-        return
-
-    try:
-        symbol_info = self.get_symbol_info()
-        if not symbol_info:
-            logging.error("❌ Impossible d'obtenir les informations du symbole")
-            return
-
-        ask_price = float(symbol_info.get('ask', 0))
-        bid_price = float(symbol_info.get('bid', 0))
-        lot_min = float(symbol_info.get('lotMin', 0.01))
-
         logging.info(f"""
-        ===== Exécution du trade =====
-        Signal: {signal}
-        Prix Ask: {ask_price}
-        Prix Bid: {bid_price}
-        Volume: {lot_min}
+        ===== Vérification des conditions d'entrée =====
+        Tendance actuelle: {trend}
+        Prix actuel: {last_row['close']}
         """)
+    
+        # Si aucune position n'est ouverte
+        if not self.position_open:
+            # Si la tendance est positive -> BUY
+            if trend > 0:
+                logging.info("🔵 Signal d'achat détecté - Tendance positive")
+                return "BUY"
+            # Si la tendance est négative -> SELL
+            elif trend < 0:
+                logging.info("🔴 Signal de vente détecté - Tendance négative")
+                return "SELL"
+    
+        return None
 
-        if ask_price <= 0 or bid_price <= 0:
-            logging.error("❌ Prix invalides reçus du serveur")
+   def execute_trade(self, signal):
+        if not signal or self.position_open:
             return
 
-        # Configuration des niveaux de SL et TP
-        if signal == "BUY":
-            entry_price = ask_price
-            sl_price = entry_price * 0.99  # Stop loss à -1%
-            tp_price = entry_price * 1.02  # Take profit à +2%
-        else:  # SELL
-            entry_price = bid_price
-            sl_price = entry_price * 1.01  # Stop loss à +1%
-            tp_price = entry_price * 0.98  # Take profit à -2%
+        try:
+            symbol_info = self.get_symbol_info()
+            if not symbol_info:
+                logging.error("❌ Impossible d'obtenir les informations du symbole")
+                return
 
-        trade_cmd = {
-            "command": "tradeTransaction",
-            "arguments": {
-                "tradeTransInfo": {
-                    "cmd": 0 if signal == "BUY" else 1,
-                    "symbol": self.symbol,
-                    "volume": lot_min,
-                    "type": 0,
-                    "price": entry_price,
-                    "sl": round(sl_price, 2),
-                    "tp": round(tp_price, 2)
+            ask_price = float(symbol_info.get('ask', 0))
+            bid_price = float(symbol_info.get('bid', 0))
+            lot_min = float(symbol_info.get('lotMin', 0.01))
+
+            logging.info(f"""
+            ===== Exécution du trade =====
+            Signal: {signal}
+            Prix Ask: {ask_price}
+            Prix Bid: {bid_price}
+            Volume: {lot_min}
+            """)
+
+            if ask_price <= 0 or bid_price <= 0:
+                logging.error("❌ Prix invalides reçus du serveur")
+                return
+
+            # Configuration des niveaux de SL et TP
+            if signal == "BUY":
+                entry_price = ask_price
+                sl_price = entry_price * 0.99  # Stop loss à -1%
+                tp_price = entry_price * 1.02  # Take profit à +2%
+            else:  # SELL
+                entry_price = bid_price
+                sl_price = entry_price * 1.01  # Stop loss à +1%
+                tp_price = entry_price * 0.98  # Take profit à -2%
+
+            trade_cmd = {
+                "command": "tradeTransaction",
+                "arguments": {
+                    "tradeTransInfo": {
+                        "cmd": 0 if signal == "BUY" else 1,
+                        "symbol": self.symbol,
+                        "volume": lot_min,
+                        "type": 0,
+                        "price": entry_price,
+                        "sl": round(sl_price, 2),
+                        "tp": round(tp_price, 2)
+                    }
                 }
             }
-        }
 
-        response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
-        if response.get('status'):
-            self.current_order_id = response.get('returnData', {}).get('order', 0)
-            self.position_open = True
-            logging.info(f"✅ Trade exécuté: {signal}, Order ID: {self.current_order_id}")
-        else:
-            logging.error(f"❌ Échec de l'exécution du trade: {response}")
+            response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
+            if response.get('status'):
+                self.current_order_id = response.get('returnData', {}).get('order', 0)
+                self.position_open = True
+                logging.info(f"✅ Trade exécuté: {signal}, Order ID: {self.current_order_id}")
+            else:
+                logging.error(f"❌ Échec de l'exécution du trade: {response}")
 
-    except Exception as e:
-        logging.error(f"❌ Erreur dans execute_trade: {str(e)}")
+        except Exception as e:
+            logging.error(f"❌ Erreur dans execute_trade: {str(e)}")
 
-def check_trade_status(self):
-    try:
-        if not self.current_order_id:
-            self.position_open = False
-            return False
+   def check_trade_status(self):
+        try:
+            if not self.current_order_id:
+                self.position_open = False
+                return False
         
-        cmd = {
-            "command": "getTrades",
-            "arguments": {
-                "openedOnly": True
+            cmd = {
+                "command": "getTrades",
+                "arguments": {
+                    "openedOnly": True
+                }
             }
-        }
-        response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+            response = self.client.commandExecute(cmd["command"], cmd["arguments"])
     
-        if not response or 'returnData' not in response:
-            self.position_open = False
-            return False
+            if not response or 'returnData' not in response:
+                self.position_open = False
+                return False
         
-        trades = response['returnData']
-        position_still_open = any(trade.get('order2') == self.current_order_id for trade in trades)
+            trades = response['returnData']
+            position_still_open = any(trade.get('order2') == self.current_order_id for trade in trades)
         
-        if not position_still_open:
-            logging.info("Position fermée - Ready pour nouveau trade")
-            self.position_open = False
-            self.current_order_id = None
+            if not position_still_open:
+                logging.info("Position fermée - Ready pour nouveau trade")
+                self.position_open = False
+                self.current_order_id = None
             
-        return position_still_open
+            return position_still_open
     
-    except Exception as e:
-        logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
-        return False
+        except Exception as e:
+            logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
+            return False
 
    def run_strategy(self):
     logging.info(f"🤖 Bot trading {self.symbol}")
