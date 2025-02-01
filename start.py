@@ -6,6 +6,7 @@ import time
 from bot_cloud import XTBTradingBot
 from threading import Thread, Lock
 import google.cloud.logging
+from functools import wraps
 
 # Configuration du logging
 client = google.cloud.logging.Client()
@@ -19,89 +20,119 @@ CORS(app)
 # Variables globales avec verrou
 bot_lock = Lock()
 bot = None
-bot_status = {"is_running": False, "last_check": None}
+bot_status = {
+    "is_running": False,
+    "last_check": None,
+    "last_request_time": 0,
+    "request_count": 0
+}
 
-def ensure_bot_initialized():
-    global bot, bot_status
-    with bot_lock:
-        try:
-            if bot is None:
-                logger.info("Initialisation du bot...")
-                bot = XTBTradingBot(symbol='BITCOIN', timeframe='1h')
-                if bot.connect():
-                    bot_status["is_running"] = True
-                    logger.info("Bot initialisé et connecté avec succès")
-                    return True
-                else:
-                    logger.error("Échec de la connexion du bot")
-                    return False
+# Configuration des limites de taux
+RATE_LIMIT = 30  # requêtes par minute
+RATE_WINDOW = 60  # fenêtre de 60 secondes
+
+def rate_limit():
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            current_time = time.time()
+            with bot_lock:
+                # Réinitialise le compteur si la fenêtre est passée
+                if current_time - bot_status["last_request_time"] > RATE_WINDOW:
+                    bot_status["request_count"] = 0
+                    bot_status["last_request_time"] = current_time
+                
+                # Vérifie la limite de taux
+                if bot_status["request_count"] >= RATE_LIMIT:
+                    logger.warning("Limite de taux dépassée")
+                    return jsonify({
+                        "error": "Rate limit exceeded",
+                        "retry_after": RATE_WINDOW - (current_time - bot_status["last_request_time"])
+                    }), 429
+                
+                bot_status["request_count"] += 1
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
+
+def init_bot_if_needed():
+    global bot
+    try:
+        if bot is None:
+            logger.info("Initialisation du bot...")
+            user_id = os.getenv('XTB_USER_ID')
+            password = os.getenv('XTB_PASSWORD')
+            
+            if not user_id or not password:
+                logger.error("Identifiants XTB manquants")
+                return False
+                
+            bot = XTBTradingBot(symbol='BITCOIN', timeframe='1h')
+            if not bot.connect():
+                logger.error("Échec de la connexion initiale")
+                return False
+            
+            bot_status["is_running"] = True
             return True
-        except Exception as e:
-            logger.error(f"Erreur lors de l'initialisation du bot: {str(e)}")
-            return False
+        return True
+    except Exception as e:
+        logger.error(f"Erreur d'initialisation: {str(e)}")
+        return False
 
 def run_trading():
-    global bot, bot_status
+    global bot
     logger.info("Démarrage du thread de trading")
     while True:
         try:
             with bot_lock:
-                if ensure_bot_initialized():
-                    if not bot.check_connection():
-                        logger.warning("Connexion perdue, tentative de reconnexion...")
-                        if bot.connect():
-                            logger.info("Reconnecté avec succès")
-                            bot_status["is_running"] = True
-                        else:
-                            logger.error("Échec de la reconnexion")
-                            bot_status["is_running"] = False
+                if bot and bot.check_connection():
+                    bot.run_strategy()
+                    bot_status["last_check"] = time.time()
+                else:
+                    if init_bot_if_needed():
+                        logger.info("Bot réinitialisé avec succès")
                     else:
-                        bot_status["last_check"] = time.time()
-                        bot.run_strategy()
-            time.sleep(30)  # Délai réduit pour une meilleure réactivité
+                        logger.error("Échec de la réinitialisation")
+                        time.sleep(30)
+            time.sleep(5)
         except Exception as e:
-            logger.error(f"Erreur dans le thread de trading: {str(e)}")
+            logger.error(f"Erreur dans run_trading: {str(e)}")
             time.sleep(10)
 
 @app.route("/")
+@rate_limit()
 def home():
     return jsonify({
         "status": "running",
-        "bot_initialized": bot is not None,
         "service": "trading-bot"
     })
 
 @app.route("/status")
+@rate_limit()
 def status():
-    global bot, bot_status
     with bot_lock:
-        if not ensure_bot_initialized():
-            return jsonify({
-                "status": "disconnected",
-                "error": "Impossible d'initialiser le bot",
-                "last_check": bot_status.get("last_check")
-            })
-
-        is_connected = bot and bot.check_connection() and bot_status["is_running"]
-        account_info = bot.check_account_status() if is_connected else None
-
+        is_initialized = init_bot_if_needed()
+        is_connected = bot and bot.check_connection() if is_initialized else False
+        
         return jsonify({
             "status": "connected" if is_connected else "disconnected",
-            "account_info": account_info,
+            "bot_initialized": is_initialized,
+            "is_running": bot_status["is_running"],
             "last_check": bot_status.get("last_check"),
-            "is_running": bot_status["is_running"]
+            "account_info": bot.check_account_status() if is_connected else None
         })
 
 if __name__ == "__main__":
+    # Démarre le thread de trading
     try:
-        if ensure_bot_initialized():
+        if init_bot_if_needed():
             trading_thread = Thread(target=run_trading, daemon=True)
             trading_thread.start()
             logger.info("Thread de trading démarré")
-        else:
-            logger.error("Échec de l'initialisation initiale du bot")
     except Exception as e:
-        logger.error(f"Erreur lors du démarrage: {str(e)}")
+        logger.error(f"Erreur au démarrage: {str(e)}")
 
+    # Démarre le serveur Flask
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=False)
+    
