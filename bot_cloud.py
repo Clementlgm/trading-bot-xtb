@@ -297,7 +297,7 @@ class XTBTradingBot:
            return False
 
    def run_strategy(self):
-    logging.info(f"🤖 Bot trading {self.symbol}")
+    logging.info(f"🤖 Bot trading {self.symbol} démarré")
     
     while True:
         try:
@@ -307,28 +307,51 @@ class XTBTradingBot:
                     time.sleep(30)
                     continue
                     
-            # Vérifie les positions ouvertes
-            if self.position_open:
-                if not self.check_trade_status():
-                    logging.info("Position fermée")
-                    self.position_open = False
-                    self.current_order_id = None
-
-            # Analyse du marché
+            # Récupération des données
             df = self.get_historical_data()
             if df is not None:
+                logging.info(f"Données récupérées: {len(df)} périodes")
+                
+                # Analyse des données
                 df = self.calculate_indicators(df)
                 if df is not None:
+                    # Log des dernières valeurs
+                    last_row = df.iloc[-1]
+                    logging.info(f"""
+                    ===== État du marché =====
+                    Symbole: {self.symbol}
+                    Dernier prix: {last_row['close']}
+                    SMA20: {last_row['SMA20']}
+                    SMA50: {last_row['SMA50']}
+                    RSI: {last_row['RSI']}
+                    Position ouverte: {self.position_open}
+                    """)
+                    
+                    # Vérifie les positions ouvertes
+                    if self.position_open:
+                        if not self.check_trade_status():
+                            logging.info("🔄 Position fermée, prêt pour nouveau trade")
+                            self.position_open = False
+                            self.current_order_id = None
+                            
+                    # Recherche de signaux
                     signal = self.check_trading_signals(df)
                     if signal:
-                        logging.info(f"Signal détecté: {signal}")
+                        logging.info(f"🎯 Signal détecté: {signal}")
                         self.execute_trade(signal)
-                        
+                    else:
+                        logging.info("⏳ Pas de signal pour le moment")
+                else:
+                    logging.error("Erreur dans le calcul des indicateurs")
+            else:
+                logging.error("Erreur dans la récupération des données")
+                
             # Attente avant prochaine analyse
+            logging.info("--- Fin du cycle d'analyse ---")
             time.sleep(60)
             
         except Exception as e:
-            logging.error(f"Erreur dans run_strategy: {str(e)}")
+            logging.error(f"Erreur critique dans run_strategy: {str(e)}")
             time.sleep(30)
 
 from flask import Flask, jsonify
