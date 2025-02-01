@@ -137,30 +137,51 @@ class XTBTradingBot:
            return None
 
    def check_trading_signals(self, df):
-       if len(df) < 50:
-           return None
+    if len(df) < 50:
+        logger.info("Pas assez de données pour générer un signal (minimum 50 périodes nécessaires)")
+        return None
            
-       last_row = df.iloc[-1]
-       
-       buy_signal = (
-           last_row['SMA20'] > last_row['SMA50'] and
-           last_row['RSI'] < 70 and
-           last_row['close'] > last_row['SMA20']
-       )
-       
-       sell_signal = (
-           last_row['SMA20'] < last_row['SMA50'] and
-           last_row['RSI'] > 30 and
-           last_row['close'] < last_row['SMA20']
-       )
-       
-       logging.info(f"🔍 Analyse - SMA20: {last_row['SMA20']}, SMA50: {last_row['SMA50']}, RSI: {last_row['RSI']}, Close: {last_row['close']}")
-       
-       if buy_signal:
-           return "BUY"
-       elif sell_signal:
-           return "SELL"
-       return None
+    last_row = df.iloc[-1]
+    
+    logger.info(f"""
+    ===== Analyse des conditions de trading =====
+    Prix actuel: {last_row['close']}
+    SMA20: {last_row['SMA20']}
+    SMA50: {last_row['SMA50']}
+    RSI: {last_row['RSI']}
+    
+    Conditions achat:
+    - SMA20 > SMA50: {last_row['SMA20'] > last_row['SMA50']}
+    - RSI < 70: {last_row['RSI'] < 70}
+    - Prix > SMA20: {last_row['close'] > last_row['SMA20']}
+    
+    Conditions vente:
+    - SMA20 < SMA50: {last_row['SMA20'] < last_row['SMA50']}
+    - RSI > 30: {last_row['RSI'] > 30}
+    - Prix < SMA20: {last_row['close'] < last_row['SMA20']}
+    """)
+    
+    buy_signal = (
+        last_row['SMA20'] > last_row['SMA50'] and
+        last_row['RSI'] < 70 and
+        last_row['close'] > last_row['SMA20']
+    )
+    
+    sell_signal = (
+        last_row['SMA20'] < last_row['SMA50'] and
+        last_row['RSI'] > 30 and
+        last_row['close'] < last_row['SMA20']
+    )
+    
+    if buy_signal:
+        logger.info("🔵 Signal d'achat détecté!")
+        return "BUY"
+    elif sell_signal:
+        logger.info("🔴 Signal de vente détecté!")
+        return "SELL"
+    else:
+        logger.info("⚪ Aucun signal généré - Conditions non remplies")
+        return None
 
    def get_symbol_info(self):
        try:
@@ -177,53 +198,80 @@ class XTBTradingBot:
            return {}
 
    def execute_trade(self, signal):
-       if not signal or self.position_open:
-           return
+    if not signal:
+        logger.info("Aucun signal à exécuter")
+        return
+        
+    if self.position_open:
+        logger.info("Position déjà ouverte, pas de nouvel ordre")
+        return
 
-       symbol_info = self.get_symbol_info()
-       if not symbol_info:
-           logging.error("❌ Impossible d'obtenir les informations du symbole")
-           return
+    try:
+        symbol_info = self.get_symbol_info()
+        if not symbol_info:
+            logger.error("❌ Impossible d'obtenir les informations du symbole")
+            return
 
-       ask_price = float(symbol_info.get('ask', 0))
-       bid_price = float(symbol_info.get('bid', 0))
-       lot_min = float(symbol_info.get('lotMin', 0.01))
+        ask_price = float(symbol_info.get('ask', 0))
+        bid_price = float(symbol_info.get('bid', 0))
+        lot_min = float(symbol_info.get('lotMin', 0.01))
 
-       if ask_price <= 0 or bid_price <= 0:
-           logging.error("❌ Prix invalides reçus du serveur")
-           return
+        logger.info(f"""
+        ===== Exécution du trade =====
+        Signal: {signal}
+        Ask Price: {ask_price}
+        Bid Price: {bid_price}
+        Lot minimum: {lot_min}
+        """)
 
-       if signal == "BUY":
-        entry_price = ask_price
-        sl_price = entry_price - 500  # SL à $500 sous le prix d'entrée
-        tp_price = entry_price + 1000  # TP à $1000 au-dessus du prix d'entrée
-       else:  # SELL
-        entry_price = bid_price
-        sl_price = entry_price + 500  # SL à $500 au-dessus du prix d'entrée
-        tp_price = entry_price - 1000  # TP à $1000 sous le prix d'entrée 
+        if ask_price <= 0 or bid_price <= 0:
+            logger.error("❌ Prix invalides reçus du serveur")
+            return
 
-       trade_cmd = {
-           "command": "tradeTransaction",
-           "arguments": {
-               "tradeTransInfo": {
-                   "cmd": 0 if signal == "BUY" else 1,
-                   "symbol": self.symbol,
-                   "volume": lot_min,
-                   "type": 0,
-                   "price": entry_price,
-                   "sl": round(sl_price, 2),
-                   "tp": round(tp_price, 2)
-               }
-           }
-       }
+        if signal == "BUY":
+            entry_price = ask_price
+            sl_price = entry_price - 500
+            tp_price = entry_price + 1000
+        else:  # SELL
+            entry_price = bid_price
+            sl_price = entry_price + 500
+            tp_price = entry_price - 1000
 
-       response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
-       if response.get('status'):
-           self.current_order_id = response.get('returnData', {}).get('order', 0)
-           self.position_open = True
-           logging.info(f"✅ Trade exécuté: {signal}, Order ID: {self.current_order_id}")
-       else:
-           logging.error(f"❌ Échec de l'exécution du trade: {response}")
+        logger.info(f"""
+        ===== Paramètres du trade =====
+        Prix d'entrée: {entry_price}
+        Stop Loss: {sl_price}
+        Take Profit: {tp_price}
+        Volume: {lot_min}
+        """)
+
+        trade_cmd = {
+            "command": "tradeTransaction",
+            "arguments": {
+                "tradeTransInfo": {
+                    "cmd": 0 if signal == "BUY" else 1,
+                    "symbol": self.symbol,
+                    "volume": lot_min,
+                    "type": 0,
+                    "price": entry_price,
+                    "sl": round(sl_price, 2),
+                    "tp": round(tp_price, 2)
+                }
+            }
+        }
+
+        response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
+        logger.info(f"Réponse du serveur: {response}")
+        
+        if response.get('status'):
+            self.current_order_id = response.get('returnData', {}).get('order', 0)
+            self.position_open = True
+            logger.info(f"✅ Trade exécuté avec succès: {signal}, Order ID: {self.current_order_id}")
+        else:
+            logger.error(f"❌ Échec de l'exécution du trade: {response}")
+            
+    except Exception as e:
+        logger.error(f"❌ Erreur dans execute_trade: {str(e)}")
 
    def check_trade_status(self):
        try:
