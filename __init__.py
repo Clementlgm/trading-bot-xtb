@@ -1,4 +1,4 @@
-def __init__(self, symbol='BITCOIN', timeframe='1h'):
+def __init__(self, symbol='BITCOIN', timeframe='1m'):
     load_dotenv()  # Charge les variables d'environnement
     self.userId = os.getenv('XTB_USER_ID')
     self.password = os.getenv('XTB_PASSWORD')
