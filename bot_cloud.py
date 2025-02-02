@@ -31,7 +31,7 @@ except:
 load_dotenv()
 
 class XTBTradingBot:
-   def __init__(self, symbol='BITCOIN', timeframe='1h'):
+   def __init__(self, symbol='BITCOIN', timeframe='1m'):
        load_dotenv()
        self.userId = os.getenv('XTB_USER_ID') 
        self.password = os.getenv('XTB_PASSWORD') 
@@ -378,7 +378,7 @@ def run_trading():
 def init_bot():
     global bot, trade_thread
     if not bot:
-        bot = XTBTradingBot(symbol='BITCOIN', timeframe='1h')
+        bot = XTBTradingBot(symbol='BITCOIN', timeframe='1m')
         bot.connect()
         trade_thread = Thread(target=run_trading, daemon=True)
         trade_thread.start()
@@ -400,7 +400,7 @@ if __name__ == "__main__":
 if __name__ == "__main__":
    while True:
        try:
-           bot = XTBTradingBot(symbol='BITCOIN', timeframe='1h')
+           bot = XTBTradingBot(symbol='BITCOIN', timeframe='1m')
            if bot.connect():
                bot.run_strategy()
            else:
