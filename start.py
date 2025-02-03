@@ -1,12 +1,14 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 from flask_cors import CORS
-import os, logging, time, jwt
+import os
+import logging
+import time
 from bot_cloud import XTBTradingBot
 from threading import Thread, Lock
 import google.cloud.logging
 from functools import wraps
-from datetime import datetime, timedelta
 
+# Configuration du logging
 client = google.cloud.logging.Client()
 client.setup_logging()
 logging.basicConfig(level=logging.INFO)
@@ -14,8 +16,8 @@ logger = logging.getLogger('trading_bot')
 
 app = Flask(__name__)
 CORS(app)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24))
 
+# Variables globales avec verrou
 bot_lock = Lock()
 bot = None
 bot_status = {
@@ -25,21 +27,9 @@ bot_status = {
     "request_count": 0
 }
 
-RATE_LIMIT = 30
-RATE_WINDOW = 60
-
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization', '').replace('bearer ', '')
-        if not token:
-            return jsonify({"error": "Token requis"}), 401
-        try:
-            jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            return f(*args, **kwargs)
-        except:
-            return jsonify({"error": "Token invalide"}), 401
-    return decorated
+# Configuration des limites de taux
+RATE_LIMIT = 30  # requêtes par minute
+RATE_WINDOW = 60  # fenêtre de 60 secondes
 
 def rate_limit():
     def decorator(f):
@@ -47,13 +37,16 @@ def rate_limit():
         def wrapped(*args, **kwargs):
             current_time = time.time()
             with bot_lock:
+                # Réinitialise le compteur si la fenêtre est passée
                 if current_time - bot_status["last_request_time"] > RATE_WINDOW:
                     bot_status["request_count"] = 0
                     bot_status["last_request_time"] = current_time
                 
+                # Vérifie la limite de taux
                 if bot_status["request_count"] >= RATE_LIMIT:
+                    logger.warning("Limite de taux dépassée")
                     return jsonify({
-                        "error": "Limite de taux dépassée",
+                        "error": "Rate limit exceeded",
                         "retry_after": RATE_WINDOW - (current_time - bot_status["last_request_time"])
                     }), 429
                 
@@ -66,6 +59,7 @@ def init_bot_if_needed():
     global bot
     try:
         if bot is None:
+            logger.info("Initialisation du bot...")
             user_id = os.getenv('XTB_USER_ID')
             password = os.getenv('XTB_PASSWORD')
             
@@ -75,6 +69,7 @@ def init_bot_if_needed():
                 
             bot = XTBTradingBot(symbol='BITCOIN', timeframe='1h')
             if not bot.connect():
+                logger.error("Échec de la connexion initiale")
                 return False
             
             bot_status["is_running"] = True
@@ -86,6 +81,7 @@ def init_bot_if_needed():
 
 def run_trading():
     global bot
+    logger.info("Démarrage du thread de trading")
     while True:
         try:
             with bot_lock:
@@ -93,46 +89,25 @@ def run_trading():
                     bot.run_strategy()
                     bot_status["last_check"] = time.time()
                 else:
-                    if not init_bot_if_needed():
+                    if init_bot_if_needed():
+                        logger.info("Bot réinitialisé avec succès")
+                    else:
+                        logger.error("Échec de la réinitialisation")
                         time.sleep(30)
             time.sleep(5)
         except Exception as e:
-            logger.error(f"Erreur trading: {str(e)}")
+            logger.error(f"Erreur dans run_trading: {str(e)}")
             time.sleep(10)
 
-@app.route("/", methods=['GET', 'POST'])
-@require_auth
+@app.route("/")
 @rate_limit()
-def handle_orders():
-    if request.method == 'POST':
-        try:
-            data = request.get_json()
-            required = ['symbol', 'type', 'volume']
-            if not all(k in data for k in required):
-                return jsonify({"error": "Paramètres manquants"}), 400
-                
-            with bot_lock:
-                if not init_bot_if_needed():
-                    return jsonify({"error": "Bot non initialisé"}), 500
-                    
-                success = bot.execute_trade(
-                    data['type'].upper(),
-                    data['symbol'],
-                    float(data['volume'])
-                )
-                
-                if success:
-                    return jsonify({"status": "ordre_execute"})
-                return jsonify({"error": "Échec exécution"}), 500
-                
-        except Exception as e:
-            logger.error(f"Erreur ordre: {str(e)}")
-            return jsonify({"error": str(e)}), 500
-            
-    return jsonify({"status": "running"})
+def home():
+    return jsonify({
+        "status": "running",
+        "service": "trading-bot"
+    })
 
 @app.route("/status")
-@require_auth
 @rate_limit()
 def status():
     with bot_lock:
@@ -148,12 +123,16 @@ def status():
         })
 
 if __name__ == "__main__":
+    # Démarre le thread de trading
     try:
         if init_bot_if_needed():
-            Thread(target=run_trading, daemon=True).start()
+            trading_thread = Thread(target=run_trading, daemon=True)
+            trading_thread.start()
+            logger.info("Thread de trading démarré")
     except Exception as e:
-        logger.error(f"Erreur démarrage: {str(e)}")
+        logger.error(f"Erreur au démarrage: {str(e)}")
 
+    # Démarre le serveur Flask
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
     
