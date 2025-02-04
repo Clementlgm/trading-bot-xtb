@@ -19,8 +19,8 @@ class Client(object):
     def connect(self, server='xapi.xtb.com', port=5124):
         try:
             # Configuration spécifique pour le serveur démo avec l'IP directe
-            server = 'xapi.xtb.com'  # Adresse IP du serveur démo XTB
-            port = 5124  # Port standard pour le démo
+            server = 'demo.xtb.com'  # Adresse IP du serveur démo XTB xapi.xtb.com
+            port = 5112  # Port standard pour le démo 5124
             
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             context = ssl.create_default_context()
