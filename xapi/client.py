@@ -16,7 +16,7 @@ class Client(object):
         self.mutex = False
         self.symbol_array = []
 
-    def connect(self, server='xapi.xtb.com', port=5124):
+    def connect(self, server='demo.xtb.com', port=5112):
         try:
             # Configuration spécifique pour le serveur démo avec l'IP directe
             server = 'demo.xtb.com'  # Adresse IP du serveur démo XTB xapi.xtb.com
