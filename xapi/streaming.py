@@ -11,6 +11,7 @@ class Streaming(object):
         self.stop = False
 
     def connect(self):
+         STREAM_PORT = 5113  # Pour compte démo, 5125 pour réel
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock = ssl.wrap_socket(self.sock)
         self.sock.connect(('xapi.xtb.com', 5125))
