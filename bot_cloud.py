@@ -66,17 +66,55 @@ class XTBTradingBot:
         logging.error(f"❌ Erreur de connexion: {str(e)}")
         return False
 
+   #def check_connection(self):
+    #try:
+        #if self.client is None:
+         #   return self.connect()
+        
+        #response = self.client.commandExecute("ping")
+        #return response and response.get('status')
+    #except Exception as e:
+        #logging.error(f"❌ Erreur de vérification de connexion: {str(e)}")
+        #return False
+
    def check_connection(self):
     try:
         if self.client is None:
             return self.connect()
         
-        response = self.client.commandExecute("ping")
-        return response and response.get('status')
-    except Exception as e:
-        logging.error(f"❌ Erreur de vérification de connexion: {str(e)}")
-        return False
+        # Ajout d'un timeout et gestion de la reconnexion
+        current_time = time.time()
+        if current_time - self.last_reconnect >= self.reconnect_interval:
+            logger.info("Renouvellement préventif de la connexion")
+            self.disconnect()
+            time.sleep(1)
+            success = self.connect()
+            if success:
+                self.last_reconnect = current_time
+            return success
 
+        response = self.client.commandExecute("ping")
+        if not response or not response.get('status'):
+            logger.warning("Ping échoué, tentative de reconnexion")
+            return self.connect()
+            
+        return True
+    except Exception as e:
+        logger.error(f"Erreur de connexion: {str(e)}")
+        return self.connect()
+
+   def disconnect(self):
+    try:
+        if self.streaming:
+            self.streaming.disconnect()
+        if self.client:
+            self.client.disconnect()
+    except Exception as e:
+        logger.error(f"Erreur lors de la déconnexion: {str(e)}")
+    finally:
+        self.streaming = None
+        self.client = None
+        
    def check_account_status(self):
     try:
         cmd = {"command": "getMarginLevel"}
@@ -198,6 +236,15 @@ class XTBTradingBot:
            return {}
 
    def execute_trade(self, signal):
+    max_retries = 3
+    retry_delay = 2
+
+    for attempt in range(max_retries):
+        try:
+            if not self.check_connection():
+                logger.error(f"Échec de connexion (tentative {attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+                continue
     if not signal:
         logger.info("Aucun signal à exécuter")
         return
@@ -272,6 +319,15 @@ class XTBTradingBot:
             
     except Exception as e:
         logger.error(f"❌ Erreur dans execute_trade: {str(e)}")
+        
+        return True
+            
+        except Exception as e:
+            logger.error(f"Erreur d'exécution (tentative {attempt + 1}/{max_retries}): {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                continue
+            return False
 
    def check_trade_status(self):
        try:
