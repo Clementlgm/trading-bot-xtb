@@ -9,7 +9,6 @@ import google.cloud.logging
 from functools import wraps
 import signal
 
-# Configuration du logging
 client = google.cloud.logging.Client()
 client.setup_logging()
 logging.basicConfig(level=logging.INFO)
@@ -18,37 +17,21 @@ logger = logging.getLogger('trading_bot')
 app = Flask(__name__)
 CORS(app)
 
-# Variables globales
 bot_lock = Lock()
 shutdown_event = Event()
 bot = None
 trading_thread = None
 bot_status = {
     "is_running": False,
-    "last_check": None,
-    "last_request_time": 0,
-    "request_count": 0
+    "last_check": None
 }
 
 def rate_limit():
     def decorator(f):
         @wraps(f)
         def wrapped(*args, **kwargs):
-            current_time = time.time()
             with bot_lock:
-                if current_time - bot_status["last_request_time"] > 60:
-                    bot_status["request_count"] = 0
-                    bot_status["last_request_time"] = current_time
-                
-                if bot_status["request_count"] >= 30:
-                    logger.warning("Limite de taux dépassée")
-                    return jsonify({
-                        "error": "Rate limit exceeded",
-                        "retry_after": 60 - (current_time - bot_status["last_request_time"])
-                    }), 429
-                
-                bot_status["request_count"] += 1
-            return f(*args, **kwargs)
+                return f(*args, **kwargs)
         return wrapped
     return decorator
 
@@ -117,16 +100,13 @@ def run_trading():
                 time.sleep(5)
 
 @app.route("/")
-def rate_limit():
-    def decorator(f):
-        @wraps(f)
-        def wrapped(*args, **kwargs):
-            with bot_lock:
-                return f(*args, **kwargs)
-        return wrapped
-    return decorator
+@rate_limit()
+def home():
+    return jsonify({
+        "status": "running",
+        "service": "trading-bot"
+    })
 
-# Utilisation simplifiée :
 @app.route("/status")
 @rate_limit()
 def status():
@@ -141,13 +121,11 @@ def status():
             "last_check": bot_status.get("last_check"),
             "account_info": bot.check_account_status() if is_connected else None
         })
-        
+
 if __name__ == "__main__":
-    # Gestion des signaux
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
-    # Démarrage du bot et du thread
     try:
         if init_bot_if_needed():
             logger.info("Bot initialisé avec succès")
@@ -156,6 +134,5 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Erreur au démarrage: {str(e)}")
 
-    # Démarrage du serveur Flask
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
