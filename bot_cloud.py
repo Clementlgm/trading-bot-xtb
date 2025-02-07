@@ -211,39 +211,37 @@ class XTBTradingBot:
         return None
             
     last_row = df.iloc[-1]
+    
+    # Ajout de logging détaillé
     logger.info(f"""
-    Conditions actuelles:
-    - SMA20: {last_row['SMA20']} > SMA50: {last_row['SMA50']} = {last_row['SMA20'] > last_row['SMA50']}
-    - RSI: {last_row['RSI']} < 70 = {last_row['RSI'] < 70}
-    - Prix: {last_row['close']} > SMA20: {last_row['SMA20']} = {last_row['close'] > last_row['SMA20']}
+    Analyse des conditions:
+    - SMA20 vs SMA50: {last_row['SMA20']} vs {last_row['SMA50']} (SMA20 > SMA50 = {last_row['SMA20'] > last_row['SMA50']})
+    - RSI: {last_row['RSI']} (< 70 = {last_row['RSI'] < 70})
+    - Prix vs SMA20: {last_row['close']} vs {last_row['SMA20']} (Prix > SMA20 = {last_row['close'] > last_row['SMA20']})
     """)
     
     buy_signal = (
-        last_row['SMA20'] > last_row['SMA50'] and
-        last_row['RSI'] < 70 and
-        last_row['close'] > last_row['SMA20']
+        last_row['SMA20'] > last_row['SMA50'] and  # tendance haussière
+        last_row['RSI'] < 70 and                   # pas de surachat
+        last_row['close'] > last_row['SMA20']      # prix > SMA20
     )
     
-    if buy_signal:
-        logger.info("🔵 SIGNAL ACHAT DÉTECTÉ")
-        return "BUY"
+    sell_signal = (
+        last_row['SMA20'] < last_row['SMA50'] and  # tendance baissière
+        last_row['RSI'] > 30 and                   # pas de survente
+        last_row['close'] < last_row['SMA20']      # prix < SMA20
+    )
     
-    logger.info("Pas de signal")
+    logger.info(f"Signal détecté - Buy: {buy_signal}, Sell: {sell_signal}")
+    
+    if buy_signal:
+        logger.info("🔵 SIGNAL BUY")
+        return "BUY"
+    elif sell_signal:
+        logger.info("🔴 SIGNAL SELL")
+        return "SELL"
+        
     return None
-       
-   def get_symbol_info(self):
-       try:
-           cmd = {
-               "command": "getSymbol",
-               "arguments": {
-                   "symbol": self.symbol
-               }
-           }
-           response = self.client.commandExecute(cmd["command"], cmd["arguments"])
-           return response.get('returnData', {}) if response else {}
-       except Exception as e:
-           logging.error(f"❌ Erreur lors de la récupération des infos du symbole: {str(e)}")
-           return {}
 
    def execute_trade(self, signal):
     if not self.check_connection():
