@@ -236,98 +236,54 @@ class XTBTradingBot:
            return {}
 
    def execute_trade(self, signal):
-    max_retries = 3
-    retry_delay = 2
-
-    for attempt in range(max_retries):
-        try:
-            if not self.check_connection():
-                logger.error(f"Échec de connexion (tentative {attempt + 1}/{max_retries})")
-                time.sleep(retry_delay)
-                continue
+    try:
+        if not self.check_connection():
+            logger.error("Pas de connexion")
+            return False
             
-            if not signal:
-                logger.info("Aucun signal à exécuter")
-                return
-                
-            if self.position_open:
-                logger.info("Position déjà ouverte, pas de nouvel ordre")
-                return
+        symbol_info = self.get_symbol_info()
+        if not symbol_info:
+            logger.error("Impossible d'obtenir les infos du symbole")
+            return False
 
-            symbol_info = self.get_symbol_info()
-            if not symbol_info:
-                logger.error("❌ Impossible d'obtenir les informations du symbole")
-                return
-
+        # Forcer la conversion en float et vérifier les valeurs
+        try:
             ask_price = float(symbol_info.get('ask', 0))
             bid_price = float(symbol_info.get('bid', 0))
             lot_min = float(symbol_info.get('lotMin', 0.01))
+        except (ValueError, TypeError):
+            logger.error("Erreur de conversion des prix")
+            return False
 
-            logger.info(f"""
-            ===== Exécution du trade =====
-            Signal: {signal}
-            Ask Price: {ask_price}
-            Bid Price: {bid_price}
-            Lot minimum: {lot_min}
-            """)
-
-            if ask_price <= 0 or bid_price <= 0:
-                logger.error("❌ Prix invalides reçus du serveur")
-                return
-
-            if signal == "BUY":
-                entry_price = ask_price
-                sl_price = round(entry_price - 0.00100, 5)  # 10 pips pour EURUSD
-                tp_price = round(entry_price + 0.00150, 5)  # 15 pips pour EURUSD
-            else:  # SELL
-                entry_price = bid_price
-                sl_price = round(entry_price + 0.00100, 5)  # 10 pips pour EURUSD
-                tp_price = round(entry_price - 0.00150, 5)  # 15 pips pour EURUSD
-
-            logger.info(f"""
-            ===== Paramètres du trade =====
-            Prix d'entrée: {entry_price}
-            Stop Loss: {sl_price}
-            Take Profit: {tp_price}
-            Volume: {lot_min}
-            """)
-
-            trade_cmd = {
-                "command": "tradeTransaction",
-                "arguments": {
-                    "tradeTransInfo": {
-                        "cmd": 0 if signal == "BUY" else 1,
-                        "symbol": self.symbol,
-                        "volume": lot_min,
-                        "type": 0,
-                        "price": entry_price,
-                        "sl": round(sl_price, 2),
-                        "tp": round(tp_price, 2)
-                    }
+        logger.info(f"Prix ask: {ask_price}, bid: {bid_price}, lot: {lot_min}")
+        
+        trade_cmd = {
+            "command": "tradeTransaction",
+            "arguments": {
+                "tradeTransInfo": {
+                    "cmd": 0 if signal == "BUY" else 1,
+                    "symbol": self.symbol,
+                    "volume": lot_min,
+                    "type": 0,
+                    "price": ask_price if signal == "BUY" else bid_price,
+                    "sl": round(ask_price * 0.99 if signal == "BUY" else bid_price * 1.01, 5),
+                    "tp": round(ask_price * 1.01 if signal == "BUY" else bid_price * 0.99, 5)
                 }
             }
+        }
 
-            response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
-            logger.info(f"Réponse du serveur: {response}")
+        response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
+        logger.info(f"Réponse trade: {response}")
+        
+        if response and response.get('status'):
+            self.position_open = True
+            return True
             
-            if response.get('status'):
-                self.current_order_id = response.get('returnData', {}).get('order', 0)
-                self.position_open = True
-                logger.info(f"✅ Trade exécuté avec succès: {signal}, Order ID: {self.current_order_id}")
-                return True
-            else:
-                logger.error(f"❌ Échec de l'exécution du trade: {response}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    continue
-                return False
-                
-        except Exception as e:
-            logger.error(f"Erreur d'exécution (tentative {attempt + 1}/{max_retries}): {str(e)}")
-            if attempt < max_retries - 1:
-                time.sleep(retry_delay)
-                continue
-            return False
+        return False
+        
+    except Exception as e:
+        logger.error(f"Erreur d'exécution: {str(e)}")
+        return False
 
    def check_trade_status(self):
        try:
