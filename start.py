@@ -129,11 +129,23 @@ def test_trade():
         init_bot()
         
     try:
-        # Force un signal d'achat test
-        logger.info("Test d'exécution d'un trade")
+        # Vérification du compte
+        account_info = bot.check_account_status()
+        logger.info(f"État du compte : {json.dumps(account_info, indent=2)}")
+        
+        # Récupération info symbole
+        symbol_info = bot.get_symbol_info()
+        logger.info(f"Info symbole : {json.dumps(symbol_info, indent=2)}")
+        
+        # Test d'un trade BUY
+        logger.info("=== Début test trade ===")
         result = bot.execute_trade("BUY")
+        logger.info(f"Résultat du trade : {result}")
+        
         return jsonify({
             "success": result,
+            "account_info": account_info,
+            "symbol_info": symbol_info,
             "message": "Trade test exécuté"
         })
     except Exception as e:
