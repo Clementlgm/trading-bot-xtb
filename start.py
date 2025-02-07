@@ -157,20 +157,25 @@ def test_trade():
 @app.route("/logs", methods=['GET'])
 def get_logs():
     logs = []
-    if bot:
-        logs.append(f"État du bot : {'connecté' if bot.client else 'déconnecté'}")
-        logs.append(f"Position ouverte : {bot.position_open}")
-        df = bot.get_historical_data()
-        if df is not None:
-            last_row = df.iloc[-1]
-            logs.append(f"""
-            Dernières valeurs:
-            - Prix: {last_row['close']}
-            - SMA20: {last_row['SMA20']}
-            - SMA50: {last_row['SMA50']}
-            - RSI: {last_row['RSI']}
-            """)
-    return jsonify({"logs": logs})
+    try:
+        if bot:
+            logs.append(f"État du bot : {'connecté' if bot.client else 'déconnecté'}")
+            logs.append(f"Position ouverte : {bot.position_open}")
+            df = bot.get_historical_data()
+            if df is not None:
+                df = bot.calculate_indicators(df)  # Calcul des indicateurs
+                if df is not None:
+                    last_row = df.iloc[-1]
+                    logs.append(f"""
+                    Dernières valeurs:
+                    - Prix: {last_row['close']}
+                    - SMA20: {last_row['SMA20']}
+                    - SMA50: {last_row['SMA50']}
+                    - RSI: {last_row['RSI']}
+                    """)
+        return jsonify({"logs": logs})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     # Démarre le thread de trading
