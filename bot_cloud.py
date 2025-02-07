@@ -236,56 +236,35 @@ class XTBTradingBot:
            return {}
 
    def execute_trade(self, signal):
-    try:
-        logger.info(f"=== Début d'exécution du trade {signal} ===")
+    if not self.check_connection():
+        logger.error("Pas de connexion")
+        return False
         
-        if not self.check_connection():
-            logger.error("Pas de connexion")
-            return False
-            
-        logger.info("Connexion OK, récupération des infos symbole...")
+    try:
         symbol_info = self.get_symbol_info()
-        logger.info(f"Infos symbole reçues: {json.dumps(symbol_info, indent=2)}")
-
-        if not symbol_info:
-            logger.error("Impossible d'obtenir les infos du symbole")
-            return False
-
-        try:
-            ask_price = float(symbol_info.get('ask', 0))
-            bid_price = float(symbol_info.get('bid', 0))
-            lot_min = max(float(symbol_info.get('lotMin', 0.01)), 0.01)
-            
-            logger.info(f"""
-            Prix reçus:
-            - Ask: {ask_price}
-            - Bid: {bid_price}
-            - Lot minimum: {lot_min}
-            """)
-            
-        except (ValueError, TypeError) as e:
-            logger.error(f"Erreur de conversion des prix: {str(e)}")
-            return False
-
-        entry_price = ask_price if signal == "BUY" else bid_price
-        sl_price = round(entry_price * (0.99 if signal == "BUY" else 1.01), 5)
-        tp_price = round(entry_price * (1.01 if signal == "BUY" else 0.99), 5)
+        ask_price = float(symbol_info.get('ask', 0))
+        bid_price = float(symbol_info.get('bid', 0))
+        lot_min = max(float(symbol_info.get('lotMin', 0.01)), 0.01)
 
         trade_cmd = {
             "command": "tradeTransaction",
             "arguments": {
                 "tradeTransInfo": {
                     "cmd": 0 if signal == "BUY" else 1,
+                    "customComment": "Bot Trade",
+                    "expiration": 0,
+                    "offset": 0,
+                    "order": 0,
+                    "price": ask_price if signal == "BUY" else bid_price,
+                    "sl": round(ask_price * 0.985 if signal == "BUY" else bid_price * 1.015, 5),
+                    "tp": round(ask_price * 1.02 if signal == "BUY" else bid_price * 0.98, 5),
                     "symbol": self.symbol,
-                    "volume": lot_min,
                     "type": 0,
-                    "price": entry_price,
-                    "sl": sl_price,
-                    "tp": tp_price
+                    "volume": lot_min
                 }
             }
         }
-        
+
         logger.info(f"Envoi ordre: {json.dumps(trade_cmd, indent=2)}")
         response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
         logger.info(f"Réponse trade: {json.dumps(response, indent=2)}")
@@ -293,14 +272,12 @@ class XTBTradingBot:
         if response and response.get('status'):
             self.position_open = True
             self.current_order_id = response.get('returnData', {}).get('order')
-            logger.info(f"Trade exécuté avec succès! Order ID: {self.current_order_id}")
             return True
             
-        logger.error(f"Échec de l'exécution du trade. Status: {response.get('status')}, Error: {response.get('errorCode')}")
         return False
         
     except Exception as e:
-        logger.error(f"Erreur d'exécution: {str(e)}")
+        logger.error(f"Erreur execution trade: {str(e)}")
         return False
 
    def check_trade_status(self):
