@@ -132,14 +132,17 @@ class XTBTradingBot:
         if not self.check_connection():
             return None
 
-        period_start = int(time.time()) - (limit * 3600)
+        end = int(time.time() * 1000)
+        start = end - (limit * 3600 * 1000)  # Convertir les heures en millisecondes
+        
         command = {
-            'command': 'getChartLastRequest',
-            'arguments': {
-                'info': {
-                    'symbol': self.symbol,
-                    'period': 1,
-                    'start': period_start * 1000,
+            "command": "getChartRangeRequest",
+            "arguments": {
+                "info": {
+                    "symbol": self.symbol,
+                    "period": 1,
+                    "start": start,
+                    "end": end
                 }
             }
         }
@@ -152,14 +155,15 @@ class XTBTradingBot:
             data = response['returnData']
             if 'rateInfos' in data and len(data['rateInfos']) > 0:
                 df = pd.DataFrame(data['rateInfos'])
-                logger.info(f"Données brutes:\n{df.head()}")
-                
-                # Conversion explicite en float
-                for col in ['open', 'high', 'low', 'close', 'vol']:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-                
-                logger.info(f"Données après conversion:\n{df.head()}")
+                df['close'] = pd.to_numeric(df['close'], errors='coerce')
+                df['open'] = pd.to_numeric(df['open'], errors='coerce')
+                df['high'] = pd.to_numeric(df['high'], errors='coerce')
+                df['low'] = pd.to_numeric(df['low'], errors='coerce')
                 df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
+                
+                logger.info(f"Premier prix: {df['close'].iloc[0]}")
+                logger.info(f"Dernier prix: {df['close'].iloc[-1]}")
+                
                 return df.sort_values('timestamp')
                 
         logger.error("Pas de données historiques reçues")
