@@ -122,6 +122,27 @@ def status():
             "account_info": bot.check_account_status() if is_connected else None
         })
 
+@app.route("/test_trade", methods=['GET'])
+def test_trade():
+    global bot
+    if not bot:
+        init_bot()
+        
+    try:
+        # Force un signal d'achat test
+        logger.info("Test d'exécution d'un trade")
+        result = bot.execute_trade("BUY")
+        return jsonify({
+            "success": result,
+            "message": "Trade test exécuté"
+        })
+    except Exception as e:
+        logger.error(f"Erreur test trade: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 if __name__ == "__main__":
     # Démarre le thread de trading
     try:
