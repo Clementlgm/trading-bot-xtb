@@ -117,13 +117,16 @@ def run_trading():
                 time.sleep(5)
 
 @app.route("/")
-@rate_limit()
-def home():
-    return jsonify({
-        "status": "running",
-        "service": "trading-bot"
-    })
+def rate_limit():
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            with bot_lock:
+                return f(*args, **kwargs)
+        return wrapped
+    return decorator
 
+# Utilisation simplifiée :
 @app.route("/status")
 @rate_limit()
 def status():
@@ -138,7 +141,7 @@ def status():
             "last_check": bot_status.get("last_check"),
             "account_info": bot.check_account_status() if is_connected else None
         })
-
+        
 if __name__ == "__main__":
     # Gestion des signaux
     signal.signal(signal.SIGTERM, signal_handler)
