@@ -132,41 +132,35 @@ class XTBTradingBot:
         if not self.check_connection():
             return None
 
-        end = int(time.time() * 1000)
-        start = end - (limit * 3600 * 1000)  # Convertir les heures en millisecondes
-        
-        command = {
-            "command": "getChartRangeRequest",
+        # Obtenir le prix actuel
+        current_prices = {
+            "command": "getTrades",
             "arguments": {
-                "info": {
-                    "symbol": self.symbol,
-                    "period": 1,
-                    "start": start,
-                    "end": end
-                }
+                "openedOnly": True
             }
         }
         
-        logger.info(f"Demande données historiques: {json.dumps(command, indent=2)}")
-        response = self.client.commandExecute(command["command"], command["arguments"])
-        logger.info(f"Réponse données historiques: {json.dumps(response, indent=2)}")
+        logger.info("Obtention des prix actuels...")
+        response = self.client.commandExecute(current_prices["command"], current_prices["arguments"])
+        logger.info(f"Réponse: {json.dumps(response, indent=2)}")
         
-        if isinstance(response, dict) and 'returnData' in response:
-            data = response['returnData']
-            if 'rateInfos' in data and len(data['rateInfos']) > 0:
-                df = pd.DataFrame(data['rateInfos'])
-                df['close'] = pd.to_numeric(df['close'], errors='coerce')
-                df['open'] = pd.to_numeric(df['open'], errors='coerce')
-                df['high'] = pd.to_numeric(df['high'], errors='coerce')
-                df['low'] = pd.to_numeric(df['low'], errors='coerce')
-                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
+        if response and 'returnData' in response:
+            # Créer un DataFrame avec une seule ligne
+            current_data = response['returnData']
+            data = {
+                'open': [float(current_data[0]['open_price'])],
+                'high': [float(current_data[0]['high'])],
+                'low': [float(current_data[0]['low'])],
+                'close': [float(current_data[0]['close_price'])],
+                'vol': [float(current_data[0]['volume'])],
+                'timestamp': [pd.Timestamp.now()]
+            }
+            
+            df = pd.DataFrame(data)
+            logger.info(f"DataFrame créé:\n{df}")
+            return df
                 
-                logger.info(f"Premier prix: {df['close'].iloc[0]}")
-                logger.info(f"Dernier prix: {df['close'].iloc[-1]}")
-                
-                return df.sort_values('timestamp')
-                
-        logger.error("Pas de données historiques reçues")
+        logger.error("Pas de données reçues")
         return None
     except Exception as e:
         logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
