@@ -132,40 +132,41 @@ class XTBTradingBot:
         if not self.check_connection():
             return None
 
-        # Obtenir le prix actuel
-        current_prices = {
-            "command": "getTrades",
+        # Obtenir les prix tick par tick
+        command = {
+            "command": "getTickPrices",
             "arguments": {
-                "openedOnly": True
+                "level": 0,
+                "symbols": [self.symbol],
+                "timestamp": int(time.time() * 1000)
             }
         }
         
-        logger.info("Obtention des prix actuels...")
-        response = self.client.commandExecute(current_prices["command"], current_prices["arguments"])
-        logger.info(f"Réponse: {json.dumps(response, indent=2)}")
-        
-        if response and 'returnData' in response:
-            # Créer un DataFrame avec une seule ligne
-            current_data = response['returnData']
-            data = {
-                'open': [float(current_data[0]['open_price'])],
-                'high': [float(current_data[0]['high'])],
-                'low': [float(current_data[0]['low'])],
-                'close': [float(current_data[0]['close_price'])],
-                'vol': [float(current_data[0]['volume'])],
-                'timestamp': [pd.Timestamp.now()]
-            }
-            
-            df = pd.DataFrame(data)
-            logger.info(f"DataFrame créé:\n{df}")
-            return df
+        logger.info(f"Demande des prix: {json.dumps(command, indent=2)}")
+        response = self.client.commandExecute(command["command"], command["arguments"])
+        logger.info(f"Réponse brute: {json.dumps(response, indent=2)}")
+
+        if response and response.get('status'):
+            quotes = response.get('returnData', {}).get('quotations', [])
+            if quotes:
+                df = pd.DataFrame({
+                    'timestamp': [pd.Timestamp.now()],
+                    'open': [float(quotes[0]['bid'])],
+                    'high': [float(quotes[0]['bid'])],
+                    'low': [float(quotes[0]['bid'])],
+                    'close': [float(quotes[0]['bid'])],
+                    'vol': [0]
+                })
                 
+                logger.info(f"DataFrame créé:\n{df}")
+                return df
+            
         logger.error("Pas de données reçues")
         return None
+        
     except Exception as e:
         logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
         return None
-
    def calculate_indicators(self, df):
        try:
            df = df.copy()
