@@ -122,6 +122,10 @@ def status():
             "account_info": bot.check_account_status() if is_connected else None
         })
 
+from flask import Flask, jsonify
+import json
+import logging
+
 @app.route("/test_trade", methods=['GET'])
 def test_trade():
     global bot
@@ -129,18 +133,14 @@ def test_trade():
         init_bot()
         
     try:
-        # Vérification du compte
         account_info = bot.check_account_status()
-        logger.info(f"État du compte : {json.dumps(account_info, indent=2)}")
+        logger.info(f"État du compte: {json.dumps(account_info, indent=2)}")
         
-        # Récupération info symbole
         symbol_info = bot.get_symbol_info()
-        logger.info(f"Info symbole : {json.dumps(symbol_info, indent=2)}")
+        logger.info(f"Info symbole: {json.dumps(symbol_info, indent=2)}")
         
-        # Test d'un trade BUY
-        logger.info("=== Début test trade ===")
         result = bot.execute_trade("BUY")
-        logger.info(f"Résultat du trade : {result}")
+        logger.info(f"Résultat trade: {result}")
         
         return jsonify({
             "success": result,
@@ -149,7 +149,6 @@ def test_trade():
             "message": "Trade test exécuté"
         })
     except Exception as e:
-        logger.error(f"Erreur test trade: {str(e)}")
         return jsonify({
             "success": False,
             "error": str(e)
