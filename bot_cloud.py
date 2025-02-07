@@ -174,33 +174,6 @@ class XTBTradingBot:
            logging.error(f"❌ Erreur lors du calcul des indicateurs: {str(e)}")
            return None
 
-   def check_trading_signals(self, df):
-        if len(df) < 50:
-            print("⚠️ Pas assez de données pour générer des signaux")
-            return None
-            
-        last_row = df.iloc[-1]
-        
-        # Vérification des signaux d'achat/vente
-        buy_signal = (
-            last_row['SMA20'] > last_row['SMA50'] and
-            last_row['RSI'] < 70 and
-            last_row['close'] > last_row['SMA20']
-        )
-        
-        sell_signal = (
-            last_row['SMA20'] < last_row['SMA50'] and
-            last_row['RSI'] > 30 and
-            last_row['close'] < last_row['SMA20']
-        )
-        
-        if buy_signal:
-            return "BUY"
-        elif sell_signal:
-            return "SELL"
-        else:
-            return None
-
    def get_symbol_info(self):
        try:
            cmd = {
