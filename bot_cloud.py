@@ -175,51 +175,31 @@ class XTBTradingBot:
            return None
 
    def check_trading_signals(self, df):
-    if len(df) < 50:
-        logger.info("Pas assez de données pour générer un signal (minimum 50 périodes nécessaires)")
-        return None
-           
-    last_row = df.iloc[-1]
-    
-    logger.info(f"""
-    ===== Analyse des conditions de trading =====
-    Prix actuel: {last_row['close']}
-    SMA20: {last_row['SMA20']}
-    SMA50: {last_row['SMA50']}
-    RSI: {last_row['RSI']}
-    
-    Conditions achat:
-    - SMA20 > SMA50: {last_row['SMA20'] > last_row['SMA50']}
-    - RSI < 70: {last_row['RSI'] < 70}
-    - Prix > SMA20: {last_row['close'] > last_row['SMA20']}
-    
-    Conditions vente:
-    - SMA20 < SMA50: {last_row['SMA20'] < last_row['SMA50']}
-    - RSI > 30: {last_row['RSI'] > 30}
-    - Prix < SMA20: {last_row['close'] < last_row['SMA20']}
-    """)
-    
-    buy_signal = (
-        last_row['SMA20'] > last_row['SMA50'] and
-        last_row['RSI'] < 70 and
-        last_row['close'] > last_row['SMA20']
-    )
-    
-    sell_signal = (
-        last_row['SMA20'] < last_row['SMA50'] and
-        last_row['RSI'] > 30 and
-        last_row['close'] < last_row['SMA20']
-    )
-    
-    if buy_signal:
-        logger.info("🔵 Signal d'achat détecté!")
-        return "BUY"
-    elif sell_signal:
-        logger.info("🔴 Signal de vente détecté!")
-        return "SELL"
-    else:
-        logger.info("⚪ Aucun signal généré - Conditions non remplies")
-        return None
+        if len(df) < 50:
+            print("⚠️ Pas assez de données pour générer des signaux")
+            return None
+            
+        last_row = df.iloc[-1]
+        
+        # Vérification des signaux d'achat/vente
+        buy_signal = (
+            last_row['SMA20'] > last_row['SMA50'] and
+            last_row['RSI'] < 70 and
+            last_row['close'] > last_row['SMA20']
+        )
+        
+        sell_signal = (
+            last_row['SMA20'] < last_row['SMA50'] and
+            last_row['RSI'] > 30 and
+            last_row['close'] < last_row['SMA20']
+        )
+        
+        if buy_signal:
+            return "BUY"
+        elif sell_signal:
+            return "SELL"
+        else:
+            return None
 
    def get_symbol_info(self):
        try:
