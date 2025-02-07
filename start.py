@@ -27,34 +27,6 @@ bot_status = {
     "request_count": 0
 }
 
-# Configuration des limites de taux
-RATE_LIMIT = 30  # requêtes par minute
-RATE_WINDOW = 60  # fenêtre de 60 secondes
-
-def rate_limit():
-    def decorator(f):
-        @wraps(f)
-        def wrapped(*args, **kwargs):
-            current_time = time.time()
-            with bot_lock:
-                # Réinitialise le compteur si la fenêtre est passée
-                if current_time - bot_status["last_request_time"] > RATE_WINDOW:
-                    bot_status["request_count"] = 0
-                    bot_status["last_request_time"] = current_time
-                
-                # Vérifie la limite de taux
-                if bot_status["request_count"] >= RATE_LIMIT:
-                    logger.warning("Limite de taux dépassée")
-                    return jsonify({
-                        "error": "Rate limit exceeded",
-                        "retry_after": RATE_WINDOW - (current_time - bot_status["last_request_time"])
-                    }), 429
-                
-                bot_status["request_count"] += 1
-            return f(*args, **kwargs)
-        return wrapped
-    return decorator
-
 def init_bot_if_needed():
     global bot
     try:
@@ -72,6 +44,8 @@ def init_bot_if_needed():
                 logger.error("Échec de la connexion initiale")
                 return False
             
+            trading_thread = Thread(target=run_trading, daemon=True)
+            trading_thread.start()
             bot_status["is_running"] = True
             return True
         return True
@@ -87,20 +61,13 @@ def run_trading():
             with bot_lock:
                 if bot and bot.check_connection():
                     bot.run_strategy()
-                    bot_status["last_check"] = time.time()
                 else:
-                    if init_bot_if_needed():
-                        logger.info("Bot réinitialisé avec succès")
-                    else:
-                        logger.error("Échec de la réinitialisation")
-                        time.sleep(30)
-            time.sleep(5)
+                    time.sleep(30)
         except Exception as e:
             logger.error(f"Erreur dans run_trading: {str(e)}")
-            time.sleep(10)
+            time.sleep(30)
 
 @app.route("/")
-@rate_limit()
 def home():
     return jsonify({
         "status": "running",
@@ -108,7 +75,6 @@ def home():
     })
 
 @app.route("/status")
-@rate_limit()
 def status():
     with bot_lock:
         is_initialized = init_bot_if_needed()
@@ -123,16 +89,5 @@ def status():
         })
 
 if __name__ == "__main__":
-    # Démarre le thread de trading
-    try:
-        if init_bot_if_needed():
-            trading_thread = Thread(target=run_trading, daemon=True)
-            trading_thread.start()
-            logger.info("Thread de trading démarré")
-    except Exception as e:
-        logger.error(f"Erreur au démarrage: {str(e)}")
-
-    # Démarre le serveur Flask
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
-    
