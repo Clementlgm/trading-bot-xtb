@@ -132,60 +132,32 @@ class XTBTradingBot:
         if not self.check_connection():
             return None
 
+        current_time = int(time.time())
+        period_start = current_time - (limit * 3600)
+        
         command = {
-            "command": "getSymbol",
-            "arguments": {
-                "symbol": self.symbol
+            'info': {
+                'symbol': self.symbol,
+                'period': 1,
+                'start': period_start * 1000,
             }
         }
         
-        # D'abord récupérer les prix actuels
-        symbol_info = self.client.commandExecute(command["command"], command["arguments"])
-        logger.info(f"Info symbole: {json.dumps(symbol_info, indent=2)}")
+        response = self.client.commandExecute('getChartLastRequest', command)
+        logger.info(f"Réponse données historiques: {json.dumps(response, indent=2)}")
         
-        if symbol_info and symbol_info.get('returnData'):
-            current_price = float(symbol_info['returnData']['bid'])
-            
-            # Créer un DataFrame avec le prix actuel
-            df = pd.DataFrame({
-                'open': [current_price],
-                'high': [current_price],
-                'low': [current_price],
-                'close': [current_price],
-                'vol': [0],
-                'timestamp': [pd.Timestamp.now()]
-            })
-            
-            # Simuler 20 périodes passées pour avoir assez de données pour les moyennes mobiles
-            for i in range(1, 51):
-                # Ajouter une légère variation au prix
-                variation = current_price * 0.0001 * np.random.randn()
-                price = current_price + variation
+        if isinstance(response, dict) and 'returnData' in response:
+            data = response['returnData']
+            if 'rateInfos' in data and len(data['rateInfos']) > 0:
+                df = pd.DataFrame(data['rateInfos'])
+                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
+                df = df.sort_values('timestamp')
+                logger.info(f"Données récupérées:\n{df.head()}")
+                return df
+        return None
                 
-                df = pd.concat([df, pd.DataFrame({
-                    'open': [price],
-                    'high': [price],
-                    'low': [price],
-                    'close': [price],
-                    'vol': [0],
-                    'timestamp': [pd.Timestamp.now() - pd.Timedelta(minutes=i)]
-                })], ignore_index=True)
-            
-            df = df.sort_values('timestamp')
-            logger.info(f"DataFrame créé avec {len(df)} lignes. Exemple:\n{df.head()}")
-            return df
-            
-        logger.error("Pas de données reçues du symbole")
-        return None
-        
     except Exception as e:
         logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
-        logger.error("Stack trace:", exc_info=True)
-        return None
-        
-    except Exception as e:
-        logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
-        logger.error(f"Stack trace:", exc_info=True)
         return None
         
    def calculate_indicators(self, df):
