@@ -434,7 +434,7 @@ def run_trading():
 def init_bot():
     global bot, trade_thread
     if not bot:
-        bot = XTBTradingBot(symbol='BITCOIN', timeframe='1m')
+        bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
         bot.connect()
         trade_thread = Thread(target=run_trading, daemon=True)
         trade_thread.start()
