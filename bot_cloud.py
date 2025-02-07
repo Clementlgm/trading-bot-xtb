@@ -128,34 +128,37 @@ class XTBTradingBot:
         return None
 
    def get_historical_data(self, limit=100):
-       try:
-           if not self.check_connection():
-               return None
+    try:
+        if not self.check_connection():
+            return None
 
-           period_start = int(time.time()) - (limit * 3600)
-           command = {
-               'command': 'getChartLastRequest',
-               'arguments': {
-                   'info': {
-                       'symbol': self.symbol,
-                       'period': 1,
-                       'start': period_start * 1000,
-                   }
-               }
-           }
-           
-           response = self.client.commandExecute(command["command"], command["arguments"])
-           
-           if isinstance(response, dict) and 'returnData' in response:
-               data = response['returnData']
-               if 'rateInfos' in data and len(data['rateInfos']) > 0:
-                   df = pd.DataFrame(data['rateInfos'])
-                   df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
-                   return df.sort_values('timestamp')
-           return None
-       except Exception as e:
-           logging.error(f"❌ Erreur dans get_historical_data: {str(e)}")
-           return None
+        period_start = int(time.time()) - (limit * 3600)
+        command = {
+            'command': 'getChartLastRequest',
+            'arguments': {
+                'info': {
+                    'symbol': self.symbol,
+                    'period': 1,
+                    'start': period_start * 1000,
+                }
+            }
+        }
+        
+        response = self.client.commandExecute(command["command"], command["arguments"])
+        
+        if isinstance(response, dict) and 'returnData' in response:
+            data = response['returnData']
+            if 'rateInfos' in data and len(data['rateInfos']) > 0:
+                df = pd.DataFrame(data['rateInfos'])
+                # Conversion explicite en float
+                for col in ['open', 'high', 'low', 'close', 'vol']:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
+                return df.sort_values('timestamp')
+        return None
+    except Exception as e:
+        logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
+        return None
 
    def calculate_indicators(self, df):
        try:
