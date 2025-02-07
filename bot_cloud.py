@@ -31,7 +31,7 @@ except:
 load_dotenv()
 
 class XTBTradingBot:
-   def __init__(self, symbol='BITCOIN', timeframe='1m'):
+   def __init__(self, symbol='EURUSD', timeframe='1m'):
        load_dotenv()
        self.userId = os.getenv('XTB_USER_ID') 
        self.password = os.getenv('XTB_PASSWORD') 
@@ -277,12 +277,12 @@ class XTBTradingBot:
 
             if signal == "BUY":
                 entry_price = ask_price
-                sl_price = entry_price - 500
-                tp_price = entry_price + 1000
+                sl_price = round(entry_price - 0.00100, 5)  # 10 pips pour EURUSD
+                tp_price = round(entry_price + 0.00150, 5)  # 15 pips pour EURUSD
             else:  # SELL
                 entry_price = bid_price
-                sl_price = entry_price + 500
-                tp_price = entry_price - 1000
+                sl_price = round(entry_price + 0.00100, 5)  # 10 pips pour EURUSD
+                tp_price = round(entry_price - 0.00150, 5)  # 15 pips pour EURUSD
 
             logger.info(f"""
             ===== Paramètres du trade =====
@@ -456,7 +456,7 @@ if __name__ == "__main__":
 if __name__ == "__main__":
    while True:
        try:
-           bot = XTBTradingBot(symbol='BITCOIN', timeframe='1m')
+           bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
            if bot.connect():
                bot.run_strategy()
            else:
