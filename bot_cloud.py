@@ -132,41 +132,48 @@ class XTBTradingBot:
         if not self.check_connection():
             return None
 
-        # Obtenir les prix tick par tick
+        # Utiliser getCandles à la place
         command = {
-            "command": "getTickPrices",
+            "command": "getCandles",
             "arguments": {
-                "level": 0,
-                "symbols": [self.symbol],
-                "timestamp": int(time.time() * 1000)
+                "symbol": self.symbol,
+                "start": int((time.time() - limit * 3600) * 1000),  # Dernières 'limit' heures
+                "end": int(time.time() * 1000),
+                "period": 1  # 1 minute
             }
         }
         
-        logger.info(f"Demande des prix: {json.dumps(command, indent=2)}")
+        logger.info(f"Demande données candles: {json.dumps(command)}")
         response = self.client.commandExecute(command["command"], command["arguments"])
-        logger.info(f"Réponse brute: {json.dumps(response, indent=2)}")
+        logger.info(f"Réponse données candles: {json.dumps(response)}")
 
         if response and response.get('status'):
-            quotes = response.get('returnData', {}).get('quotations', [])
-            if quotes:
-                df = pd.DataFrame({
-                    'timestamp': [pd.Timestamp.now()],
-                    'open': [float(quotes[0]['bid'])],
-                    'high': [float(quotes[0]['bid'])],
-                    'low': [float(quotes[0]['bid'])],
-                    'close': [float(quotes[0]['bid'])],
-                    'vol': [0]
-                })
+            candles = response.get('returnData', {}).get('candles', [])
+            if candles:
+                data = []
+                for candle in candles:
+                    data.append({
+                        'open': float(candle['open']),
+                        'high': float(candle['high']),
+                        'low': float(candle['low']),
+                        'close': float(candle['close']),
+                        'vol': float(candle['vol']),
+                        'timestamp': pd.to_datetime(candle['ctm'], unit='ms')
+                    })
                 
-                logger.info(f"DataFrame créé:\n{df}")
+                df = pd.DataFrame(data)
+                logger.info(f"DataFrame créé avec {len(df)} lignes")
+                logger.info(f"Premières lignes:\n{df.head()}")
                 return df
             
-        logger.error("Pas de données reçues")
+        logger.error("Pas de données historiques reçues")
         return None
         
     except Exception as e:
         logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
+        logger.error(f"Stack trace:", exc_info=True)
         return None
+        
    def calculate_indicators(self, df):
        try:
            df = df.copy()
