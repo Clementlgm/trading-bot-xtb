@@ -136,24 +136,27 @@ class XTBTradingBot:
         period_start = current_time - (limit * 3600)
         
         command = {
-            'info': {
-                'symbol': self.symbol,
-                'period': 1,
-                'start': period_start * 1000,
+            'command': 'getChartLastRequest',
+            'arguments': {
+                'info': {
+                    'symbol': self.symbol,
+                    'period': 1,
+                    'start': period_start * 1000,
+                }
             }
         }
         
-        response = self.client.commandExecute('getChartLastRequest', command)
+        response = self.client.commandExecute(command['command'], command['arguments'])
         logger.info(f"Réponse données historiques: {json.dumps(response, indent=2)}")
         
         if isinstance(response, dict) and 'returnData' in response:
             data = response['returnData']
             if 'rateInfos' in data and len(data['rateInfos']) > 0:
                 df = pd.DataFrame(data['rateInfos'])
+                for col in ['open', 'high', 'low', 'close']:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
                 df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
-                df = df.sort_values('timestamp')
-                logger.info(f"Données récupérées:\n{df.head()}")
-                return df
+                return df.sort_values('timestamp')
         return None
                 
     except Exception as e:
