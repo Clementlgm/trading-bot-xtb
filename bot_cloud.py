@@ -174,6 +174,32 @@ class XTBTradingBot:
            logging.error(f"❌ Erreur lors du calcul des indicateurs: {str(e)}")
            return None
 
+   def check_trading_signals(self, df):
+    if len(df) < 50:
+        logger.info("⚠️ Pas assez de données")
+        return None
+            
+    last_row = df.iloc[-1]
+    logger.info(f"""
+    Conditions actuelles:
+    - SMA20: {last_row['SMA20']} > SMA50: {last_row['SMA50']} = {last_row['SMA20'] > last_row['SMA50']}
+    - RSI: {last_row['RSI']} < 70 = {last_row['RSI'] < 70}
+    - Prix: {last_row['close']} > SMA20: {last_row['SMA20']} = {last_row['close'] > last_row['SMA20']}
+    """)
+    
+    buy_signal = (
+        last_row['SMA20'] > last_row['SMA50'] and
+        last_row['RSI'] < 70 and
+        last_row['close'] > last_row['SMA20']
+    )
+    
+    if buy_signal:
+        logger.info("🔵 SIGNAL ACHAT DÉTECTÉ")
+        return "BUY"
+    
+    logger.info("Pas de signal")
+    return None
+       
    def get_symbol_info(self):
        try:
            cmd = {
