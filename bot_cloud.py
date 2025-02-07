@@ -144,17 +144,25 @@ class XTBTradingBot:
             }
         }
         
+        logger.info(f"Demande données historiques: {json.dumps(command, indent=2)}")
         response = self.client.commandExecute(command["command"], command["arguments"])
+        logger.info(f"Réponse données historiques: {json.dumps(response, indent=2)}")
         
         if isinstance(response, dict) and 'returnData' in response:
             data = response['returnData']
             if 'rateInfos' in data and len(data['rateInfos']) > 0:
                 df = pd.DataFrame(data['rateInfos'])
+                logger.info(f"Données brutes:\n{df.head()}")
+                
                 # Conversion explicite en float
                 for col in ['open', 'high', 'low', 'close', 'vol']:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+                logger.info(f"Données après conversion:\n{df.head()}")
                 df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
                 return df.sort_values('timestamp')
+                
+        logger.error("Pas de données historiques reçues")
         return None
     except Exception as e:
         logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
