@@ -31,7 +31,7 @@ except:
 load_dotenv()
 
 class XTBTradingBot:
-   def __init__(self, symbol='BITCOIN', timeframe='1m'):
+   def __init__(self, symbol='EURUSD', timeframe='1m'):
        load_dotenv()
        self.userId = os.getenv('XTB_USER_ID') 
        self.password = os.getenv('XTB_PASSWORD') 
@@ -46,7 +46,7 @@ class XTBTradingBot:
        self.last_reconnect = time.time()
        self.reconnect_interval = 60
        self.min_volume = 0.001
-       self.risk_percentage = 0.02
+       self.risk_percentage = 0.01
 
    def connect(self):
     try:
@@ -227,7 +227,7 @@ class XTBTradingBot:
         symbol_info = self.get_symbol_info()
         ask_price = float(symbol_info.get('ask', 0))
         bid_price = float(symbol_info.get('bid', 0))
-        lot_min = max(float(symbol_info.get('lotMin', 0.001)), 0.001)
+        lot_min = max(float(symbol_info.get('lotMin', 0.01)), 0.01)
 
         trade_cmd = {
             "command": "tradeTransaction",
@@ -239,8 +239,8 @@ class XTBTradingBot:
                     "offset": 0,
                     "order": 0,
                     "price": ask_price if signal == "BUY" else bid_price,
-                    "sl": round(ask_price * 0.985 if signal == "BUY" else bid_price * 1.01, 2),
-                    "tp": round(ask_price * 1.02 if signal == "BUY" else bid_price * 0.985, 2),
+                    "sl": round(ask_price * 0.985 if signal == "BUY" else bid_price * 1.015, 5),
+                    "tp": round(ask_price * 1.02 if signal == "BUY" else bid_price * 0.98, 5),
                     "symbol": self.symbol,
                     "type": 0,
                     "volume": lot_min
@@ -289,57 +289,60 @@ class XTBTradingBot:
    def run_strategy(self):
     logging.info(f"🤖 Bot trading {self.symbol} démarré")
     
-    try:
-        if not self.check_connection():
-            logging.error("Connexion perdue, tentative de reconnexion...")
-            if not self.connect():
-                return
-                
-        # Récupération des données
-        df = self.get_historical_data()
-        if df is not None:
-            logging.info(f"Données récupérées: {len(df)} périodes")
-            
-            # Analyse des données
-            df = self.calculate_indicators(df)
+    while True:
+        try:
+            if not self.check_connection():
+                logging.error("Connexion perdue, tentative de reconnexion...")
+                if not self.connect():
+                    time.sleep(30)
+                    continue
+                    
+            # Récupération des données
+            df = self.get_historical_data()
             if df is not None:
-                # Log des dernières valeurs
-                last_row = df.iloc[-1]
-                logging.info(f"""
-                ===== État du marché =====
-                Symbole: {self.symbol}
-                Dernier prix: {last_row['close']}
-                SMA20: {last_row['SMA20']}
-                SMA50: {last_row['SMA50']}
-                RSI: {last_row['RSI']}
-                Position ouverte: {self.position_open}
-                """)
+                logging.info(f"Données récupérées: {len(df)} périodes")
                 
-                # Vérifie les positions ouvertes
-                if self.position_open:
-                    if not self.check_trade_status():
-                        logging.info("🔄 Position fermée, prêt pour nouveau trade")
-                        self.position_open = False
-                        self.current_order_id = None
-                        
-                # Recherche de signaux uniquement si aucune position n'est ouverte
-                if not self.position_open:
+                # Analyse des données
+                df = self.calculate_indicators(df)
+                if df is not None:
+                    # Log des dernières valeurs
+                    last_row = df.iloc[-1]
+                    logging.info(f"""
+                    ===== État du marché =====
+                    Symbole: {self.symbol}
+                    Dernier prix: {last_row['close']}
+                    SMA20: {last_row['SMA20']}
+                    SMA50: {last_row['SMA50']}
+                    RSI: {last_row['RSI']}
+                    Position ouverte: {self.position_open}
+                    """)
+                    
+                    # Vérifie les positions ouvertes
+                    if self.position_open:
+                        if not self.check_trade_status():
+                            logging.info("🔄 Position fermée, prêt pour nouveau trade")
+                            self.position_open = False
+                            self.current_order_id = None
+                            
+                    # Recherche de signaux
                     signal = self.check_trading_signals(df)
                     if signal:
                         logging.info(f"🎯 Signal détecté: {signal}")
-                        if self.execute_trade(signal):
-                            logging.info(f"✅ Trade exécuté avec succès: {signal}")
-                        else:
-                            logging.error("❌ Échec de l'exécution du trade")
+                        self.execute_trade(signal)
                     else:
                         logging.info("⏳ Pas de signal pour le moment")
+                else:
+                    logging.error("Erreur dans le calcul des indicateurs")
             else:
-                logging.error("Erreur dans le calcul des indicateurs")
-        else:
-            logging.error("Erreur dans la récupération des données")
+                logging.error("Erreur dans la récupération des données")
+                
+            # Attente avant prochaine analyse
+            logging.info("--- Fin du cycle d'analyse ---")
+            time.sleep(60)
             
-    except Exception as e:
-        logging.error(f"Erreur critique dans run_strategy: {str(e)}")
+        except Exception as e:
+            logging.error(f"Erreur critique dans run_strategy: {str(e)}")
+            time.sleep(30)
 
 from flask import Flask, jsonify
 import os, logging
@@ -365,7 +368,7 @@ def run_trading():
 def init_bot():
     global bot, trade_thread
     if not bot:
-        bot = XTBTradingBot(symbol='BITCOIN', timeframe='1m')
+        bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
         bot.connect()
         trade_thread = Thread(target=run_trading, daemon=True)
         trade_thread.start()
@@ -381,26 +384,18 @@ def status():
     })
 
 if __name__ == "__main__":
-    bot = None
-    while True:
-        try:
-            if bot is None or not bot.check_connection():
-                bot = XTBTradingBot(symbol='BITCOIN', timeframe='1m')
-                if not bot.connect():
-                    logging.error("Échec de connexion, nouvelle tentative dans 60 secondes...")
-                    time.sleep(60)
-                    continue
-            
-            bot.run_strategy()
-            # Attente avant la prochaine itération
-            time.sleep(60)
-            
-        except Exception as e:
-            logging.error(f"Erreur critique: {str(e)}")
-            if bot:
-                try:
-                    bot.disconnect()
-                except:
-                    pass
-                bot = None
-            time.sleep(60)
+    init_bot()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))                
+
+if __name__ == "__main__":
+   while True:
+       try:
+           bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+           if bot.connect():
+               bot.run_strategy()
+           else:
+               logging.error("Échec de connexion, nouvelle tentative dans 60 secondes...")
+               time.sleep(60)
+       except Exception as e:
+           logging.error(f"Erreur critique: {str(e)}")
+           time.sleep(60)
