@@ -45,7 +45,7 @@ class XTBTradingBot:
        self.current_order_id = None
        self.last_reconnect = time.time()
        self.reconnect_interval = 60
-       self.min_volume = 0.0001
+       self.min_volume = 0.001
        self.risk_percentage = 0.01
 
    def connect(self):
