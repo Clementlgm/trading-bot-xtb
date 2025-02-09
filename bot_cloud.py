@@ -31,7 +31,7 @@ except:
 load_dotenv()
 
 class XTBTradingBot:
-   def __init__(self, symbol='EURUSD', timeframe='1m'):
+   def __init__(self, symbol='BITCOIN', timeframe='1m'):
        load_dotenv()
        self.userId = os.getenv('XTB_USER_ID') 
        self.password = os.getenv('XTB_PASSWORD') 
@@ -45,7 +45,7 @@ class XTBTradingBot:
        self.current_order_id = None
        self.last_reconnect = time.time()
        self.reconnect_interval = 60
-       self.min_volume = 0.001
+       self.min_volume = 0.0001
        self.risk_percentage = 0.01
 
    def connect(self):
@@ -365,7 +365,7 @@ def run_trading():
 def init_bot():
     global bot, trade_thread
     if not bot:
-        bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+        bot = XTBTradingBot(symbol='BITCOIN', timeframe='1m')
         bot.connect()
         trade_thread = Thread(target=run_trading, daemon=True)
         trade_thread.start()
@@ -385,7 +385,7 @@ if __name__ == "__main__":
     while True:
         try:
             if bot is None or not bot.check_connection():
-                bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+                bot = XTBTradingBot(symbol='BITCOIN', timeframe='1m')
                 if not bot.connect():
                     logging.error("Échec de connexion, nouvelle tentative dans 60 secondes...")
                     time.sleep(60)
