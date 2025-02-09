@@ -46,7 +46,7 @@ class XTBTradingBot:
        self.last_reconnect = time.time()
        self.reconnect_interval = 60
        self.min_volume = 0.001
-       self.risk_percentage = 0.01
+       self.risk_percentage = 0.02
 
    def connect(self):
     try:
@@ -227,7 +227,7 @@ class XTBTradingBot:
         symbol_info = self.get_symbol_info()
         ask_price = float(symbol_info.get('ask', 0))
         bid_price = float(symbol_info.get('bid', 0))
-        lot_min = max(float(symbol_info.get('lotMin', 0.01)), 0.01)
+        lot_min = max(float(symbol_info.get('lotMin', 0.001)), 0.001)
 
         trade_cmd = {
             "command": "tradeTransaction",
@@ -239,8 +239,8 @@ class XTBTradingBot:
                     "offset": 0,
                     "order": 0,
                     "price": ask_price if signal == "BUY" else bid_price,
-                    "sl": round(ask_price * 0.985 if signal == "BUY" else bid_price * 1.015, 5),
-                    "tp": round(ask_price * 1.02 if signal == "BUY" else bid_price * 0.98, 5),
+                    "sl": round(ask_price * 0.985 if signal == "BUY" else bid_price * 1.01, 2),
+                    "tp": round(ask_price * 1.02 if signal == "BUY" else bid_price * 0.985, 2),
                     "symbol": self.symbol,
                     "type": 0,
                     "volume": lot_min
