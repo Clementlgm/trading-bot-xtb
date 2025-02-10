@@ -156,6 +156,7 @@ def test_trade():
 
 @app.route("/logs", methods=['GET'])
 def get_logs():
+    verbose = request.args.get('verbose', 'false').lower() == 'true'
     try:
         if not bot:
             return jsonify({"error": "Bot non initialisé"}), 400
@@ -243,10 +244,6 @@ def get_logs():
     except Exception as e:
         logger.error(f"Erreur dans get_logs: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
-@app.route("/logs")
-def get_logs():
-    verbose = request.args.get('verbose', 'false').lower() == 'true'
     
     # Démarre le serveur Flask
     port = int(os.environ.get("PORT", 8080))
