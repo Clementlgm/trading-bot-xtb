@@ -310,32 +310,37 @@ class XTBTradingBot:
            logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
            return False
 
-   def run_trading():
-    global bot
-    logger.info("🚀 Démarrage du thread de trading")
-    
-    while True:
-        try:
-            with bot_lock:
-                if bot and bot.check_connection():
-                    logger.info("🔄 Exécution du cycle de trading")
-                    bot.run_strategy()
-                else:
-                    logger.warning("⚠️ Bot non connecté, tentative de réinitialisation")
-                    if init_bot_if_needed():
-                        logger.info("✅ Bot réinitialisé avec succès")
-                    else:
-                        logger.error("❌ Échec de la réinitialisation")
-                        time.sleep(30)
-                        continue
-                        
-            # Attendre 1 minute avant le prochain cycle
-            logger.info("⏳ Attente avant le prochain cycle...")
-            time.sleep(60)
-            
-        except Exception as e:
-            logger.error(f"❌ Erreur dans run_trading: {str(e)}")
-            time.sleep(30)
+   def run_strategy(self):
+        print(f"\n🤖 Démarrage du bot de trading sur {self.symbol}")
+        
+        while True:
+            try:
+                # Vérification stricte des positions au début de chaque cycle
+                has_positions = self.get_active_positions()
+                
+                if has_positions:
+                    print(f"📊 En attente de clôture des positions actives...")
+                    time.sleep(30)  # Attente plus courte quand des positions sont ouvertes
+                    continue
+                
+                # Si aucune position n'est ouverte, recherche de nouvelles opportunités
+                df = self.get_historical_data()
+                if df is not None:
+                    df = self.calculate_indicators(df)
+                    if df is not None:
+                        signal = self.check_trading_signals(df)
+                        if signal:
+                            print(f"📊 Signal détecté: {signal}")
+                            self.execute_trade(signal)
+                
+                print("⏳ Attente de 1 minute...")
+                time.sleep(60)
+                
+            except Exception as e:
+                print(f"❌ Erreur dans la boucle de trading: {str(e)}")
+                print("⏳ Attente de 30 secondes...")
+                time.sleep(30)
+                self.connect()
 
 from flask import Flask, jsonify
 import os, logging
