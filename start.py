@@ -156,7 +156,6 @@ def test_trade():
 
 @app.route("/logs", methods=['GET'])
 def get_logs():
-    verbose = request.args.get('verbose', 'false').lower() == 'true'
     try:
         if not bot:
             return jsonify({"error": "Bot non initialisé"}), 400
