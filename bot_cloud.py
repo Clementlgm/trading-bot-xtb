@@ -190,43 +190,31 @@ class XTBTradingBot:
            return None
 
    def check_trading_signals(self, df):
-    if len(df) < 50:
-        logger.info("⚠️ Pas assez de données pour générer des signaux")
-        return None
+        if len(df) < 50:
+            print("⚠️ Pas assez de données pour générer des signaux")
+            return None
             
-    last_row = df.iloc[-1]
-    
-    logger.info(f"""
-    Conditions actuelles:
-    - Prix: {last_row['close']}
-    - SMA20: {last_row['SMA20']} vs SMA50: {last_row['SMA50']} = {last_row['SMA20'] > last_row['SMA50']}
-    - RSI: {last_row['RSI']} 
-    - Prix vs SMA20: {last_row['close']} vs {last_row['SMA20']} = {last_row['close'] > last_row['SMA20']}
-    """)
-    
-    # Signal d'achat
-    buy_signal = (
-        last_row['SMA20'] > last_row['SMA50'] and  # tendance haussière
-        last_row['RSI'] < 70 and                    # pas de surachat
-        last_row['close'] > last_row['SMA20']       # prix au-dessus de la SMA20
-    )
-    
-    # Signal de vente
-    sell_signal = (
-        last_row['SMA20'] < last_row['SMA50'] and  # tendance baissière
-        last_row['RSI'] > 30 and                    # pas de survente
-        last_row['close'] < last_row['SMA20']       # prix en-dessous de la SMA20
-    )
-    
-    if buy_signal:
-        logger.info("🔵 SIGNAL ACHAT DÉTECTÉ")
-        return "BUY"
-    elif sell_signal:
-        logger.info("🔴 SIGNAL VENTE DÉTECTÉ")
-        return "SELL"
+        last_row = df.iloc[-1]
         
-    logger.info("⏳ Pas de signal pour le moment")
-    return None
+        # Vérification des signaux d'achat/vente
+        buy_signal = (
+            last_row['SMA20'] > last_row['SMA50'] and
+            last_row['RSI'] < 70 and
+            last_row['close'] > last_row['SMA20']
+        )
+        
+        sell_signal = (
+            last_row['SMA20'] < last_row['SMA50'] and
+            last_row['RSI'] > 30 and
+            last_row['close'] < last_row['SMA20']
+        )
+        
+        if buy_signal:
+            return "BUY"
+        elif sell_signal:
+            return "SELL"
+        else:
+            return None
        
    def get_symbol_info(self):
        try:
