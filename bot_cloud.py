@@ -300,60 +300,57 @@ class XTBTradingBot:
    def run_strategy(self):
     logging.info(f"🤖 Bot trading {self.symbol} démarré")
     
-    while True:
-        try:
-            if not self.check_connection():
-                logging.error("Connexion perdue, tentative de reconnexion...")
-                if not self.connect():
-                    time.sleep(30)
-                    continue
-                    
-            # Récupération des données
-            df = self.get_historical_data()
-            if df is not None:
-                logging.info(f"Données récupérées: {len(df)} périodes")
+    try:
+        if not self.check_connection():
+            logging.error("Connexion perdue, tentative de reconnexion...")
+            if not self.connect():
+                return
                 
-                # Analyse des données
-                df = self.calculate_indicators(df)
-                if df is not None:
-                    # Log des dernières valeurs
-                    last_row = df.iloc[-1]
-                    logging.info(f"""
-                    ===== État du marché =====
-                    Symbole: {self.symbol}
-                    Dernier prix: {last_row['close']}
-                    SMA20: {last_row['SMA20']}
-                    SMA50: {last_row['SMA50']}
-                    RSI: {last_row['RSI']}
-                    Position ouverte: {self.position_open}
-                    """)
-                    
-                    # Vérifie les positions ouvertes
-                    if self.position_open:
-                        if not self.check_trade_status():
-                            logging.info("🔄 Position fermée, prêt pour nouveau trade")
-                            self.position_open = False
-                            self.current_order_id = None
-                            
-                    # Recherche de signaux
+        # Récupération des données
+        df = self.get_historical_data()
+        if df is not None:
+            logging.info(f"Données récupérées: {len(df)} périodes")
+            
+            # Analyse des données
+            df = self.calculate_indicators(df)
+            if df is not None:
+                # Log des dernières valeurs
+                last_row = df.iloc[-1]
+                logging.info(f"""
+                ===== État du marché =====
+                Symbole: {self.symbol}
+                Dernier prix: {last_row['close']}
+                SMA20: {last_row['SMA20']}
+                SMA50: {last_row['SMA50']}
+                RSI: {last_row['RSI']}
+                Position ouverte: {self.position_open}
+                """)
+                
+                # Vérifie les positions ouvertes
+                if self.position_open:
+                    if not self.check_trade_status():
+                        logging.info("🔄 Position fermée, prêt pour nouveau trade")
+                        self.position_open = False
+                        self.current_order_id = None
+                        
+                # Recherche de signaux uniquement si aucune position n'est ouverte
+                if not self.position_open:
                     signal = self.check_trading_signals(df)
                     if signal:
                         logging.info(f"🎯 Signal détecté: {signal}")
-                        self.execute_trade(signal)
+                        if self.execute_trade(signal):
+                            logging.info(f"✅ Trade exécuté avec succès: {signal}")
+                        else:
+                            logging.error("❌ Échec de l'exécution du trade")
                     else:
                         logging.info("⏳ Pas de signal pour le moment")
-                else:
-                    logging.error("Erreur dans le calcul des indicateurs")
             else:
-                logging.error("Erreur dans la récupération des données")
-                
-            # Attente avant prochaine analyse
-            logging.info("--- Fin du cycle d'analyse ---")
-            time.sleep(60)
+                logging.error("Erreur dans le calcul des indicateurs")
+        else:
+            logging.error("Erreur dans la récupération des données")
             
-        except Exception as e:
-            logging.error(f"Erreur critique dans run_strategy: {str(e)}")
-            time.sleep(30)
+    except Exception as e:
+        logging.error(f"Erreur critique dans run_strategy: {str(e)}")
 
 from flask import Flask, jsonify
 import os, logging
