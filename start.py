@@ -157,6 +157,9 @@ def test_trade():
 @app.route("/logs", methods=['GET'])
 def get_logs():
     try:
+        # Récupération du paramètre verbose
+        verbose = request.args.get('verbose', 'false').lower() == 'true'
+        
         if not bot:
             return jsonify({"error": "Bot non initialisé"}), 400
 
@@ -200,6 +203,13 @@ def get_logs():
                 - SMA20 < SMA50: {'✅' if not sma_condition else '❌'} ({last_row['SMA20']:.5f} vs {last_row['SMA50']:.5f})
                 - RSI > 30: {'✅' if rsi_sell_condition else '❌'} ({last_row['RSI']:.2f})
                 - Prix < SMA20: {'✅' if not price_sma_condition else '❌'} ({last_row['close']} vs {last_row['SMA20']:.5f})""")
+                
+                if verbose:
+                    # Ajouter plus de détails en mode verbose
+                    logs.append(f"""📊 Détails supplémentaires:
+                    - Spread actuel: {last_row['high'] - last_row['low']}
+                    - Volume: {last_row.get('vol', 'N/A')}
+                    - Timestamp: {last_row['timestamp']}""")
                 
                 # Infos sur les ordres en cours
                 if has_positions:
