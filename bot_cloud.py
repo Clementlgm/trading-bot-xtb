@@ -132,37 +132,46 @@ class XTBTradingBot:
         if not self.check_connection():
             return None
 
-        current_time = int(time.time())
-        period_start = current_time - (limit * 3600)
+        end = int(time.time() * 1000)
+        start = end - (limit * 3600 * 1000)  # Convertir les heures en millisecondes
         
         command = {
-            'command': 'getChartLastRequest',
-            'arguments': {
-                'info': {
-                    'symbol': self.symbol,
-                    'period': 1,
-                    'start': period_start * 1000,
+            "command": "getChartRangeRequest",
+            "arguments": {
+                "info": {
+                    "symbol": self.symbol,
+                    "period": 1,
+                    "start": start,
+                    "end": end
                 }
             }
         }
         
-        response = self.client.commandExecute(command['command'], command['arguments'])
+        logger.info(f"Demande données historiques: {json.dumps(command, indent=2)}")
+        response = self.client.commandExecute(command["command"], command["arguments"])
         logger.info(f"Réponse données historiques: {json.dumps(response, indent=2)}")
         
         if isinstance(response, dict) and 'returnData' in response:
             data = response['returnData']
             if 'rateInfos' in data and len(data['rateInfos']) > 0:
                 df = pd.DataFrame(data['rateInfos'])
-                for col in ['open', 'high', 'low', 'close']:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                df['close'] = pd.to_numeric(df['close'], errors='coerce')
+                df['open'] = pd.to_numeric(df['open'], errors='coerce')
+                df['high'] = pd.to_numeric(df['high'], errors='coerce')
+                df['low'] = pd.to_numeric(df['low'], errors='coerce')
                 df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
-                return df.sort_values('timestamp')
-        return None
                 
+                logger.info(f"Premier prix: {df['close'].iloc[0]}")
+                logger.info(f"Dernier prix: {df['close'].iloc[-1]}")
+                
+                return df.sort_values('timestamp')
+                
+        logger.error("Pas de données historiques reçues")
+        return None
     except Exception as e:
         logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
         return None
-        
+
    def calculate_indicators(self, df):
        try:
            df = df.copy()
@@ -186,37 +195,39 @@ class XTBTradingBot:
         return None
             
     last_row = df.iloc[-1]
-    
-    # Ajout de logging détaillé
     logger.info(f"""
-    Analyse des conditions:
-    - SMA20 vs SMA50: {last_row['SMA20']} vs {last_row['SMA50']} (SMA20 > SMA50 = {last_row['SMA20'] > last_row['SMA50']})
-    - RSI: {last_row['RSI']} (< 70 = {last_row['RSI'] < 70})
-    - Prix vs SMA20: {last_row['close']} vs {last_row['SMA20']} (Prix > SMA20 = {last_row['close'] > last_row['SMA20']})
+    Conditions actuelles:
+    - SMA20: {last_row['SMA20']} > SMA50: {last_row['SMA50']} = {last_row['SMA20'] > last_row['SMA50']}
+    - RSI: {last_row['RSI']} < 70 = {last_row['RSI'] < 70}
+    - Prix: {last_row['close']} > SMA20: {last_row['SMA20']} = {last_row['close'] > last_row['SMA20']}
     """)
     
     buy_signal = (
-        last_row['SMA20'] > last_row['SMA50'] and  # tendance haussière
-        last_row['RSI'] < 70 and                   # pas de surachat
-        last_row['close'] > last_row['SMA20']      # prix > SMA20
+        last_row['SMA20'] > last_row['SMA50'] and
+        last_row['RSI'] < 70 and
+        last_row['close'] > last_row['SMA20']
     )
-    
-    sell_signal = (
-        last_row['SMA20'] < last_row['SMA50'] and  # tendance baissière
-        last_row['RSI'] > 30 and                   # pas de survente
-        last_row['close'] < last_row['SMA20']      # prix < SMA20
-    )
-    
-    logger.info(f"Signal détecté - Buy: {buy_signal}, Sell: {sell_signal}")
     
     if buy_signal:
-        logger.info("🔵 SIGNAL BUY")
+        logger.info("🔵 SIGNAL ACHAT DÉTECTÉ")
         return "BUY"
-    elif sell_signal:
-        logger.info("🔴 SIGNAL SELL")
-        return "SELL"
-        
+    
+    logger.info("Pas de signal")
     return None
+       
+   def get_symbol_info(self):
+       try:
+           cmd = {
+               "command": "getSymbol",
+               "arguments": {
+                   "symbol": self.symbol
+               }
+           }
+           response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+           return response.get('returnData', {}) if response else {}
+       except Exception as e:
+           logging.error(f"❌ Erreur lors de la récupération des infos du symbole: {str(e)}")
+           return {}
 
    def execute_trade(self, signal):
     if not self.check_connection():
@@ -399,3 +410,4 @@ if __name__ == "__main__":
        except Exception as e:
            logging.error(f"Erreur critique: {str(e)}")
            time.sleep(60)
+
