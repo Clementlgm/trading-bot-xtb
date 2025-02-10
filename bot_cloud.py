@@ -1,540 +1,425 @@
-from flask import Flask, jsonify
-from flask_cors import CORS
-import os
+from xapi.client import Client
+from xapi.streaming import Streaming
+from dotenv import load_dotenv
+import pandas as pd
+import numpy as np
 import logging
 import time
 import json
-from xapi.client import Client
-from xapi.streaming import Streaming
-from threading import Thread, Lock
-import google.cloud.logging
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from logging.handlers import RotatingFileHandler
+import os
 
-# Configuration du logging
-client = google.cloud.logging.Client()
-client.setup_logging()
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('trading.log'),
+        logging.StreamHandler()
+    ]
+)
 
-def setup_logger():
-    logger = logging.getLogger('trading_bot')
-    logger.setLevel(logging.DEBUG)
-    
-    # Handler pour Cloud Logging
-    handler = RotatingFileHandler(
-        'trading.log',
-        maxBytes=10000000,
-        backupCount=5
-    )
-    
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    return logger
+# Configuration logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logger = logging.getLogger('trading_bot')
 
-logger = setup_logger()
+try:
+   import google.cloud.logging
+   client = google.cloud.logging.Client()
+   client.setup_logging()
+except:
+   pass
 
-app = Flask(__name__)
-CORS(app)
+load_dotenv()
 
 class XTBTradingBot:
-    def __init__(self, symbol='EURUSD', timeframe='1m'):
-        self.userId = os.getenv('XTB_USER_ID')
-        self.password = os.getenv('XTB_PASSWORD')
-        self.symbol = symbol
-        self.timeframe = timeframe
-        self.client = None
-        self.streaming = None
-        self.active_positions = set()  # Ensemble pour stocker les IDs des positions actives
-        self.last_reconnect = time.time()
-        self.reconnect_interval = 60  # Reconnexion toutes les minutes
+   def __init__(self, symbol='EURUSD', timeframe='1m'):
+       load_dotenv()
+       self.userId = os.getenv('XTB_USER_ID') 
+       self.password = os.getenv('XTB_PASSWORD') 
+       if not self.userId or not self.password:
+           raise ValueError("XTB_USER_ID et XTB_PASSWORD doivent être définis dans .env")
+       self.symbol = symbol
+       self.timeframe = timeframe
+       self.client = None
+       self.streaming = None
+       self.position_open = False
+       self.current_order_id = None
+       self.last_reconnect = time.time()
+       self.reconnect_interval = 60
+       self.min_volume = 0.001
+       self.risk_percentage = 0.01
 
-    def connect(self):
-        try:
-            logger.info(f"🔄 Tentative de connexion à XTB - UserID: {self.userId}")
-            self.client = Client()
-            self.client.connect()
-            response = self.client.login(self.userId, self.password)
-            
-            if response.get('status') == True:
-                self.streaming = Streaming(self.client)
-                logger.info("✅ Connecté à XTB avec succès")
-                self.last_reconnect = time.time()
-                return True
-            else:
-                logger.error(f"❌ Échec de connexion: {response.get('errorDescr', 'Erreur inconnue')}")
-                return False
-        except Exception as e:
-            logger.error(f"❌ Erreur de connexion: {str(e)}")
-            return False
-
-    def check_connection(self):
-        """Vérifie et renouvelle la connexion si nécessaire"""
-        current_time = time.time()
-        if current_time - self.last_reconnect > self.reconnect_interval:
-            logger.info("🔄 Renouvellement de la connexion...")
-            try:
-                self.disconnect()
-            except:
-                pass
-            return self.connect()
-        
-        try:
-            response = self.client.commandExecute("ping")
-            if not response or not response.get('status'):
-                logger.warning("Ping échoué, tentative de reconnexion")
-                return self.connect()
-            return True
-        except Exception as e:
-            logger.error(f"Erreur de connexion: {str(e)}")
-            return self.connect()
-
-    def disconnect(self):
-        try:
-            if self.streaming:
-                self.streaming.disconnect()
-            if self.client:
-                self.client.disconnect()
-        except Exception as e:
-            logger.error(f"Erreur lors de la déconnexion: {str(e)}")
-        finally:
-            self.streaming = None
-            self.client = None
-
-    def get_active_positions(self):
-        """Récupère toutes les positions actuellement ouvertes"""
-        try:
-            if not self.check_connection():
-                return False
-
-            cmd = {
-                "command": "getTrades",
-                "arguments": {
-                    "openedOnly": True
-                }
-            }
-            response = self.client.commandExecute(cmd["command"], cmd["arguments"])
-            
-            if response and 'returnData' in response:
-                self.active_positions = {
-                    str(trade['order']) 
-                    for trade in response['returnData'] 
-                    if trade.get('symbol') == self.symbol
-                }
-                
-                if self.active_positions:
-                    logger.info(f"📊 Positions actives trouvées: {len(self.active_positions)}")
-                return len(self.active_positions) > 0
-            
-            return False
-            
-        except Exception as e:
-            logger.error(f"❌ Erreur lors de la vérification des positions: {str(e)}")
-            return False
-
-    def get_historical_data(self, limit=100):
-        try:
-            if not self.check_connection():
-                return None
-
-            end = int(time.time() * 1000)
-            start = end - (limit * 3600 * 1000)
-            
-            command = {
-                "command": "getChartRangeRequest",
-                "arguments": {
-                    "info": {
-                        "symbol": self.symbol,
-                        "period": 1,
-                        "start": start,
-                        "end": end
-                    }
-                }
-            }
-            
-            logger.info(f"Demande données historiques: {json.dumps(command, indent=2)}")
-            response = self.client.commandExecute(command["command"], command["arguments"])
-            
-            if isinstance(response, dict) and 'returnData' in response:
-                data = response['returnData']
-                if 'rateInfos' in data and len(data['rateInfos']) > 0:
-                    df = pd.DataFrame(data['rateInfos'])
-                    for col in ['open', 'high', 'low', 'close']:
-                        df[col] = pd.to_numeric(df[col], errors='coerce')
-                    df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
-                    
-                    logger.info(f"Premier prix: {df['close'].iloc[0]}")
-                    logger.info(f"Dernier prix: {df['close'].iloc[-1]}")
-                    
-                    return df.sort_values('timestamp')
-            
-            logger.error("Pas de données historiques reçues")
-            return None
-                    
-        except Exception as e:
-            logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
-            return None
-
-    def calculate_indicators(self, df):
-        try:
-            df = df.copy()
-            df['SMA20'] = df['close'].rolling(window=20).mean()
-            df['SMA50'] = df['close'].rolling(window=50).mean()
-            
-            delta = df['close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            df['RSI'] = 100 - (100 / (1 + rs))
-            
-            return df
-        except Exception as e:
-            logger.error(f"❌ Erreur lors du calcul des indicateurs: {str(e)}")
-            return None
-
-    def check_trading_signals(self, df):
-        if len(df) < 50:
-            logger.info("⚠️ Pas assez de données pour générer des signaux")
-            return None
-                
-        last_row = df.iloc[-1]
-        
-        logger.info(f"""
-        Conditions actuelles:
-        - SMA20: {last_row['SMA20']} > SMA50: {last_row['SMA50']} = {last_row['SMA20'] > last_row['SMA50']}
-        - RSI: {last_row['RSI']} < 70 = {last_row['RSI'] < 70}
-        - Prix: {last_row['close']} > SMA20: {last_row['SMA20']} = {last_row['close'] > last_row['SMA20']}
-        """)
-        
-        buy_signal = (
-            last_row['SMA20'] > last_row['SMA50'] and
-            last_row['RSI'] < 70 and
-            last_row['close'] > last_row['SMA20']
-        )
-        
-        sell_signal = (
-            last_row['SMA20'] < last_row['SMA50'] and
-            last_row['RSI'] > 30 and
-            last_row['close'] < last_row['SMA20']
-        )
-        
-        if buy_signal:
-            logger.info("🔵 SIGNAL ACHAT DÉTECTÉ")
-            return "BUY"
-        elif sell_signal:
-            logger.info("🔴 SIGNAL VENTE DÉTECTÉ")
-            return "SELL"
-            
-        logger.info("Pas de signal")
-        return None
-
-    def get_symbol_info(self):
-        try:
-            cmd = {
-                "command": "getSymbol",
-                "arguments": {
-                    "symbol": self.symbol
-                }
-            }
-            response = self.client.commandExecute(cmd["command"], cmd["arguments"])
-            return response.get('returnData', {}) if response else {}
-        except Exception as e:
-            logger.error(f"❌ Erreur lors de la récupération des infos du symbole: {str(e)}")
-            return {}
-
-    def execute_trade(self, signal):
-        try:
-            # Vérification stricte des positions ouvertes
-            if self.get_active_positions():
-                logger.info("⚠️ Position déjà ouverte. Pas de nouveau trade.")
-                return False
-
-            symbol_info = self.get_symbol_info()
-            if not symbol_info:
-                logger.error("❌ Impossible d'obtenir les informations du symbole")
-                return False
-
-            # Récupération des prix et propriétés du symbole
-            ask_price = float(symbol_info.get('ask', 0))
-            bid_price = float(symbol_info.get('bid', 0))
-            lot_min = float(symbol_info.get('lotMin', 0.01))
-            lot_step = float(symbol_info.get('lotStep', 0.01))
-        
-            if ask_price <= 0 or bid_price <= 0:
-                logger.error("❌ Prix invalides reçus du serveur")
-                return False
-
-            # Calcul des niveaux
-            if signal == "BUY":
-                entry_price = ask_price
-                sl_price = round(entry_price - 0.00100, 5)  # 10 pips en dessous
-                tp_price = round(entry_price + 0.00150, 5)  # 15 pips au-dessus
-            else:
-                entry_price = bid_price
-                sl_price = round(entry_price + 0.00100, 5)  # 10 pips au-dessus
-                tp_price = round(entry_price - 0.00150, 5)  # 15 pips en dessous
-
-            # Vérification des distances minimales
-            min_distance = float(symbol_info.get('spreadRaw', 0)) * 2
-            if abs(entry_price - sl_price) < min_distance:
-                sl_price = entry_price - (min_distance * 1.5) if signal == "BUY" else entry_price + (min_distance * 1.5)
-            if abs(entry_price - tp_price) < min_distance:
-                tp_price = entry_price + (min_distance * 2) if signal == "BUY" else entry_price - (min_distance * 2)
-
-            trade_cmd = {
-                "command": "tradeTransaction",
-                "arguments": {
-                    "tradeTransInfo": {
-                        "cmd": 0 if signal == "BUY" else 1,
-                        "symbol": self.symbol,
-                        "volume": lot_min,
-                        "type": 0,
-                        "price": entry_price,
-                        "sl": sl_price,
-                        "tp": tp_price
-                    }
-                }
-            }
-
-            logger.info(f"""🔍 Envoi de l'ordre:
-            - Type: {signal}
-            - Prix d'entrée: {entry_price}
-            - Stop Loss: {sl_price}
-            - Take Profit: {tp_price}""")
-
-            response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
-            logger.info(f"Réponse trade: {json.dumps(response, indent=2)}")
-        
-            if response.get('status'):
-                new_order_id = str(response.get('returnData', {}).get('order', 0))
-                self.active_positions.add(new_order_id)
-                logger.info(f"""✅ Ordre exécuté avec succès:
-                - Order ID: {new_order_id}
-                - Type: {signal}
-                - Prix: {entry_price}
-                - SL: {sl_price}
-                - TP: {tp_price}""")
-                return True
-            else:
-                logger.error(f"❌ Erreur d'exécution: {response.get('errorDescr', 'Erreur inconnue')}")
-                return False
-            
-        except Exception as e:
-            logger.error(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
-            return False
-
-    def run_strategy(self):
-        logger.info(f"\n🤖 Démarrage du bot de trading sur {self.symbol}")
-        
-        try:
-            # Vérification stricte des positions au début de chaque cycle
-            has_positions = self.get_active_positions()
-            
-            if has_positions:
-                logger.info(f"📊 En attente de clôture des positions actives...")
-                return
-            
-            # Si aucune position n'est ouverte, recherche de nouvelles opportunités
-            df = self.get_historical_data()
-            if df is not None:
-                df = self.calculate_indicators(df)
-                if df is not None:
-                    signal = self.check_trading_signals(df)
-                    if signal:
-                        logger.info(f"📊 Signal détecté: {signal}")
-                        if self.execute_trade(signal):
-                            logger.info("✅ Trade exécuté avec succès")
-                        else:
-                            logger.error("❌ Échec de l'exécution du trade")
-                    else:
-                        logger.info("⏳ Pas de signal pour le moment")
-                else:
-                    logger.error("Erreur dans le calcul des indicateurs")
-            else:
-                logger.error("Erreur dans la récupération des données")
-                
-        except Exception as e:
-            logger.error(f"❌ Erreur dans la boucle de trading: {str(e)}")
-            self.connect()
-
-# Variables globales pour Flask
-bot_lock = Lock()
-bot = None
-bot_status = {"is_running": False}
-
-def init_bot_if_needed():
-    global bot
+   def connect(self):
     try:
-        if bot is None:
-            logger.info("Initialisation du bot...")
-            user_id = os.getenv('XTB_USER_ID')
-            password = os.getenv('XTB_PASSWORD')
-            
-            if not user_id or not password:
-                logger.error("Identifiants XTB manquants")
-                return False
-                
-            bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
-            if not bot.connect():
-                logger.error("Échec de la connexion initiale")
-                return False
-            
-            bot_status["is_running"] = True
+        logging.info(f"🔄 Tentative de connexion à XTB - UserID: {self.userId}")
+        self.client = Client()
+        self.client.connect()
+        response = self.client.login(self.userId, self.password)
+        
+        if response.get('status') == True:
+            self.streaming = Streaming(self.client)
+            logging.info("✅ Connecté à XTB avec succès")
             return True
-        return True
+        else:
+            logging.error(f"❌ Échec de connexion - Détails: {response}")
+            return False
     except Exception as e:
-        logger.error(f"Erreur d'initialisation: {str(e)}")
+        logging.error(f"❌ Erreur de connexion: {str(e)}")
         return False
 
-def run_trading():
-    global bot
-    logger.info("Démarrage du thread de trading")
-    while True:
-        try:
-            with bot_lock:
-                if bot and bot.check_connection():
-                    bot.run_strategy()
-                else:
-                    if init_bot_if_needed():
-                        logger.info("Bot réinitialisé avec succès")
-                    else:
-                        logger.error("Échec de la réinitialisation")
-                        time.sleep(30)
-            time.sleep(60)  # Attente d'une minute entre chaque cycle
-        except Exception as e:
-            logger.error(f"Erreur dans run_trading: {str(e)}")
-            time.sleep(30)
-
-# Routes Flask pour l'API
-@app.route("/")
-def home():
-    return jsonify({
-        "status": "running",
-        "service": "trading-bot"
-    })
-
-@app.route("/status")
-def status():
-    with bot_lock:
-        is_initialized = init_bot_if_needed()
-        is_connected = bot and bot.check_connection() if is_initialized else False
+   #def check_connection(self):
+    #try:
+        #if self.client is None:
+         #   return self.connect()
         
-        try:
-            active_positions = bot.get_active_positions() if is_connected else False
-            account_info = bot.client.commandExecute("getMarginLevel")['returnData'] if is_connected else None
-            
-            # Récupération des dernières données de marché
-            df = bot.get_historical_data(limit=1) if is_connected else None
-            last_price = float(df.iloc[-1]['close']) if df is not None and not df.empty else None
-            
-            return jsonify({
-                "status": "connected" if is_connected else "disconnected",
-                "bot_initialized": is_initialized,
-                "is_running": bot_status["is_running"],
-                "active_positions": active_positions,
-                "last_price": last_price,
-                "account_info": account_info
-            })
-        except Exception as e:
-            logger.error(f"Erreur dans status: {str(e)}")
-            return jsonify({
-                "status": "error",
-                "error": str(e)
-            }), 500
+        #response = self.client.commandExecute("ping")
+        #return response and response.get('status')
+    #except Exception as e:
+        #logging.error(f"❌ Erreur de vérification de connexion: {str(e)}")
+        #return False
 
-@app.route("/trades")
-def get_trades():
-    with bot_lock:
-        if not bot or not bot.check_connection():
-            return jsonify({"error": "Bot non connecté"}), 400
+   def check_connection(self):
+    try:
+        if self.client is None:
+            return self.connect()
+        
+        # Ajout d'un timeout et gestion de la reconnexion
+        current_time = time.time()
+        if current_time - self.last_reconnect >= self.reconnect_interval:
+            logger.info("Renouvellement préventif de la connexion")
+            self.disconnect()
+            time.sleep(1)
+            success = self.connect()
+            if success:
+                self.last_reconnect = current_time
+            return success
+
+        response = self.client.commandExecute("ping")
+        if not response or not response.get('status'):
+            logger.warning("Ping échoué, tentative de reconnexion")
+            return self.connect()
             
-        try:
-            cmd = {
-                "command": "getTrades",
-                "arguments": {
-                    "openedOnly": True
+        return True
+    except Exception as e:
+        logger.error(f"Erreur de connexion: {str(e)}")
+        return self.connect()
+
+   def disconnect(self):
+    try:
+        if self.streaming:
+            self.streaming.disconnect()
+        if self.client:
+            self.client.disconnect()
+    except Exception as e:
+        logger.error(f"Erreur lors de la déconnexion: {str(e)}")
+    finally:
+        self.streaming = None
+        self.client = None
+        
+   def check_account_status(self):
+    try:
+        cmd = {"command": "getMarginLevel"}
+        response = self.client.commandExecute(cmd["command"])
+        if response and 'returnData' in response:
+            margin_data = response['returnData']
+            return margin_data
+        return None
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de la vérification du compte: {str(e)}")
+        return None
+
+   def get_historical_data(self, limit=100):
+    try:
+        if not self.check_connection():
+            return None
+
+        end = int(time.time() * 1000)
+        start = end - (limit * 3600 * 1000)  # Convertir les heures en millisecondes
+        
+        command = {
+            "command": "getChartRangeRequest",
+            "arguments": {
+                "info": {
+                    "symbol": self.symbol,
+                    "period": 1,
+                    "start": start,
+                    "end": end
                 }
             }
-            response = bot.client.commandExecute(cmd["command"], cmd["arguments"])
-            return jsonify(response.get('returnData', []))
-        except Exception as e:
-            logger.error(f"Erreur dans get_trades: {str(e)}")
-            return jsonify({"error": str(e)}), 500
+        }
+        
+        logger.info(f"Demande données historiques: {json.dumps(command, indent=2)}")
+        response = self.client.commandExecute(command["command"], command["arguments"])
+        logger.info(f"Réponse données historiques: {json.dumps(response, indent=2)}")
+        
+        if isinstance(response, dict) and 'returnData' in response:
+            data = response['returnData']
+            if 'rateInfos' in data and len(data['rateInfos']) > 0:
+                df = pd.DataFrame(data['rateInfos'])
+                df['close'] = pd.to_numeric(df['close'], errors='coerce')
+                df['open'] = pd.to_numeric(df['open'], errors='coerce')
+                df['high'] = pd.to_numeric(df['high'], errors='coerce')
+                df['low'] = pd.to_numeric(df['low'], errors='coerce')
+                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
+                
+                logger.info(f"Premier prix: {df['close'].iloc[0]}")
+                logger.info(f"Dernier prix: {df['close'].iloc[-1]}")
+                
+                return df.sort_values('timestamp')
+                
+        logger.error("Pas de données historiques reçues")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
+        return None
 
-@app.route("/market_data")
-def get_market_data():
-    with bot_lock:
-        if not bot or not bot.check_connection():
-            return jsonify({"error": "Bot non connecté"}), 400
+   def calculate_indicators(self, df):
+       try:
+           df = df.copy()
+           df['SMA20'] = df['close'].rolling(window=20).mean()
+           df['SMA50'] = df['close'].rolling(window=50).mean()
+           
+           delta = df['close'].diff()
+           gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+           loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+           rs = gain / loss
+           df['RSI'] = 100 - (100 / (1 + rs))
+           
+           return df
+       except Exception as e:
+           logging.error(f"❌ Erreur lors du calcul des indicateurs: {str(e)}")
+           return None
+
+   def check_trading_signals(self, df):
+    if len(df) < 50:
+        logger.info("⚠️ Pas assez de données pour générer des signaux")
+        return None
             
-        try:
-            df = bot.get_historical_data(limit=100)
-            if df is not None:
-                df = bot.calculate_indicators(df)
-                if df is not None:
-                    # Conversion du DataFrame en format JSON
-                    data = df.tail(100).to_dict(orient='records')
-                    return jsonify({
-                        "data": data,
-                        "last_update": time.strftime('%Y-%m-%d %H:%M:%S')
-                    })
-            return jsonify({"error": "Impossible de récupérer les données"}), 500
-        except Exception as e:
-            logger.error(f"Erreur dans get_market_data: {str(e)}")
-            return jsonify({"error": str(e)}), 500
+    last_row = df.iloc[-1]
+    
+    logger.info(f"""
+    Conditions actuelles:
+    - Prix: {last_row['close']}
+    - SMA20: {last_row['SMA20']} vs SMA50: {last_row['SMA50']} = {last_row['SMA20'] > last_row['SMA50']}
+    - RSI: {last_row['RSI']} 
+    - Prix vs SMA20: {last_row['close']} vs {last_row['SMA20']} = {last_row['close'] > last_row['SMA20']}
+    """)
+    
+    # Signal d'achat
+    buy_signal = (
+        last_row['SMA20'] > last_row['SMA50'] and  # tendance haussière
+        last_row['RSI'] < 70 and                    # pas de surachat
+        last_row['close'] > last_row['SMA20']       # prix au-dessus de la SMA20
+    )
+    
+    # Signal de vente
+    sell_signal = (
+        last_row['SMA20'] < last_row['SMA50'] and  # tendance baissière
+        last_row['RSI'] > 30 and                    # pas de survente
+        last_row['close'] < last_row['SMA20']       # prix en-dessous de la SMA20
+    )
+    
+    if buy_signal:
+        logger.info("🔵 SIGNAL ACHAT DÉTECTÉ")
+        return "BUY"
+    elif sell_signal:
+        logger.info("🔴 SIGNAL VENTE DÉTECTÉ")
+        return "SELL"
+        
+    logger.info("⏳ Pas de signal pour le moment")
+    return None
+       
+   def get_symbol_info(self):
+       try:
+           cmd = {
+               "command": "getSymbol",
+               "arguments": {
+                   "symbol": self.symbol
+               }
+           }
+           response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+           return response.get('returnData', {}) if response else {}
+       except Exception as e:
+           logging.error(f"❌ Erreur lors de la récupération des infos du symbole: {str(e)}")
+           return {}
 
-@app.route("/test_trade", methods=['GET'])
-def test_trade():
-    with bot_lock:
-        if not bot or not bot.check_connection():
-            return jsonify({"error": "Bot non connecté"}), 400
+   def execute_trade(self, signal):
+    if not self.check_connection():
+        logger.error("Pas de connexion")
+        return False
+        
+    try:
+        symbol_info = self.get_symbol_info()
+        ask_price = float(symbol_info.get('ask', 0))
+        bid_price = float(symbol_info.get('bid', 0))
+        lot_min = max(float(symbol_info.get('lotMin', 0.01)), 0.01)
+
+        trade_cmd = {
+            "command": "tradeTransaction",
+            "arguments": {
+                "tradeTransInfo": {
+                    "cmd": 0 if signal == "BUY" else 1,
+                    "customComment": "Bot Trade",
+                    "expiration": 0,
+                    "offset": 0,
+                    "order": 0,
+                    "price": ask_price if signal == "BUY" else bid_price,
+                    "sl": round(ask_price * 0.985 if signal == "BUY" else bid_price * 1.015, 5),
+                    "tp": round(ask_price * 1.02 if signal == "BUY" else bid_price * 0.98, 5),
+                    "symbol": self.symbol,
+                    "type": 0,
+                    "volume": lot_min
+                }
+            }
+        }
+
+        logger.info(f"Envoi ordre: {json.dumps(trade_cmd, indent=2)}")
+        response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
+        logger.info(f"Réponse trade: {json.dumps(response, indent=2)}")
+        
+        if response and response.get('status'):
+            self.position_open = True
+            self.current_order_id = response.get('returnData', {}).get('order')
+            return True
             
-        try:
-            # Vérification des positions ouvertes
-            if bot.get_active_positions():
-                return jsonify({
-                    "success": False,
-                    "message": "Une position est déjà ouverte"
-                }), 400
+        return False
+        
+    except Exception as e:
+        logger.error(f"Erreur execution trade: {str(e)}")
+        return False
 
-            # Récupération des données de marché
-            df = bot.get_historical_data()
+   def check_trade_status(self):
+       try:
+           if not self.current_order_id:
+               return False
+           
+           cmd = {
+               "command": "getTrades",
+               "arguments": {
+                   "openedOnly": True
+               }
+           }
+           response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+       
+           if not response or 'returnData' not in response:
+               return False
+           
+           trades = response['returnData']
+           return any(trade.get('order2') == self.current_order_id for trade in trades)
+       
+       except Exception as e:
+           logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
+           return False
+
+   def run_strategy(self):
+    logging.info(f"🤖 Bot trading {self.symbol} démarré")
+    
+    while True:
+        try:
+            if not self.check_connection():
+                logging.error("Connexion perdue, tentative de reconnexion...")
+                if not self.connect():
+                    time.sleep(30)
+                    continue
+                    
+            # Récupération des données
+            df = self.get_historical_data()
             if df is not None:
-                df = bot.calculate_indicators(df)
+                logging.info(f"Données récupérées: {len(df)} périodes")
+                
+                # Analyse des données
+                df = self.calculate_indicators(df)
                 if df is not None:
-                    signal = bot.check_trading_signals(df)
+                    # Log des dernières valeurs
+                    last_row = df.iloc[-1]
+                    logging.info(f"""
+                    ===== État du marché =====
+                    Symbole: {self.symbol}
+                    Dernier prix: {last_row['close']}
+                    SMA20: {last_row['SMA20']}
+                    SMA50: {last_row['SMA50']}
+                    RSI: {last_row['RSI']}
+                    Position ouverte: {self.position_open}
+                    """)
+                    
+                    # Vérifie les positions ouvertes
+                    if self.position_open:
+                        if not self.check_trade_status():
+                            logging.info("🔄 Position fermée, prêt pour nouveau trade")
+                            self.position_open = False
+                            self.current_order_id = None
+                            
+                    # Recherche de signaux
+                    signal = self.check_trading_signals(df)
                     if signal:
-                        success = bot.execute_trade(signal)
-                        return jsonify({
-                            "success": success,
-                            "signal": signal,
-                            "message": "Trade test exécuté" if success else "Échec de l'exécution"
-                        })
+                        logging.info(f"🎯 Signal détecté: {signal}")
+                        self.execute_trade(signal)
                     else:
-                        return jsonify({
-                            "success": False,
-                            "message": "Pas de signal de trading détecté"
-                        })
-            return jsonify({
-                "success": False,
-                "message": "Impossible de récupérer les données de marché"
-            }), 500
+                        logging.info("⏳ Pas de signal pour le moment")
+                else:
+                    logging.error("Erreur dans le calcul des indicateurs")
+            else:
+                logging.error("Erreur dans la récupération des données")
+                
+            # Attente avant prochaine analyse
+            logging.info("--- Fin du cycle d'analyse ---")
+            time.sleep(60)
+            
         except Exception as e:
-            logger.error(f"Erreur dans test_trade: {str(e)}")
-            return jsonify({"error": str(e)}), 500
+            logging.error(f"Erreur critique dans run_strategy: {str(e)}")
+            time.sleep(30)
+
+from flask import Flask, jsonify
+import os, logging
+from bot_cloud import XTBTradingBot
+from threading import Thread
+import time
+
+logging.basicConfig(level=logging.INFO)
+app = Flask(__name__)
+bot = None
+trade_thread = None
+
+def run_trading():
+    while True:
+        try:
+            if bot and bot.client:
+                bot.run_strategy()
+            time.sleep(60)
+        except Exception as e:
+            logging.error(f"Error: {str(e)}")
+            time.sleep(30)
+
+def init_bot():
+    global bot, trade_thread
+    if not bot:
+        bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+        bot.connect()
+        trade_thread = Thread(target=run_trading, daemon=True)
+        trade_thread.start()
+
+@app.route("/status", methods=['GET'])
+def status():
+    global bot
+    if not bot:
+        init_bot()
+    return jsonify({
+        "status": "connected" if bot and bot.client else "disconnected",
+        "account_info": bot.check_account_status() if bot else None
+    })
 
 if __name__ == "__main__":
-    # Démarre le thread de trading
-    try:
-        if init_bot_if_needed():
-            trading_thread = Thread(target=run_trading, daemon=True)
-            trading_thread.start()
-            logger.info("Thread de trading démarré")
-    except Exception as e:
-        logger.error(f"Erreur au démarrage: {str(e)}")
+    init_bot()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))                
 
-    # Démarre le serveur Flask
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False)
+if __name__ == "__main__":
+   while True:
+       try:
+           bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+           if bot.connect():
+               bot.run_strategy()
+           else:
+               logging.error("Échec de connexion, nouvelle tentative dans 60 secondes...")
+               time.sleep(60)
+       except Exception as e:
+           logging.error(f"Erreur critique: {str(e)}")
+           time.sleep(60)
