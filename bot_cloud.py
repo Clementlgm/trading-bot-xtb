@@ -231,49 +231,86 @@ class XTBTradingBot:
            return {}
 
    def execute_trade(self, signal):
-    if not self.check_connection():
-        logger.error("Pas de connexion")
-        return False
-        
-    try:
-        symbol_info = self.get_symbol_info()
-        ask_price = float(symbol_info.get('ask', 0))
-        bid_price = float(symbol_info.get('bid', 0))
-        lot_min = max(float(symbol_info.get('lotMin', 0.01)), 0.01)
+        try:
+            # Vérification stricte des positions ouvertes
+            if self.get_active_positions():
+                print("⚠️ Position déjà ouverte. Pas de nouveau trade.")
+                return
 
-        trade_cmd = {
-            "command": "tradeTransaction",
-            "arguments": {
-                "tradeTransInfo": {
-                    "cmd": 0 if signal == "BUY" else 1,
-                    "customComment": "Bot Trade",
-                    "expiration": 0,
-                    "offset": 0,
-                    "order": 0,
-                    "price": ask_price if signal == "BUY" else bid_price,
-                    "sl": round(ask_price * 0.985 if signal == "BUY" else bid_price * 1.015, 5),
-                    "tp": round(ask_price * 1.02 if signal == "BUY" else bid_price * 0.98, 5),
-                    "symbol": self.symbol,
-                    "type": 0,
-                    "volume": lot_min
+            symbol_info = self.get_symbol_info()
+            if not symbol_info:
+                print("❌ Impossible d'obtenir les informations du symbole")
+                return
+
+            # Récupération des prix et propriétés du symbole
+            ask_price = float(symbol_info.get('ask', 0))
+            bid_price = float(symbol_info.get('bid', 0))
+            lot_min = float(symbol_info.get('lotMin', 0.01))
+            lot_step = float(symbol_info.get('lotStep', 0.01))
+        
+            if ask_price <= 0 or bid_price <= 0:
+                print("❌ Prix invalides reçus du serveur")
+                return
+
+            # Calcul de la valeur du pip
+            precision = len(str(symbol_info.get('pipsPrecision', 5)))
+            pip_value = 1 / (10 ** precision)
+
+            # Configuration des SL et TP
+            if signal == "BUY":
+                entry_price = ask_price
+                sl_price = round(entry_price - 0.00100, 5)  # 10 pips en dessous
+                tp_price = round(entry_price + 0.00150, 5)  # 20 pips au-dessus
+            else:
+                entry_price = bid_price
+                sl_price = round(entry_price + 0.00100, 5)  # 10 pips au-dessus
+                tp_price = round(entry_price - 0.00150, 5)  # 20 pips en dessous
+
+            # Vérification des distances minimales
+            min_distance = float(symbol_info.get('spreadRaw', 0)) * 2
+            if abs(entry_price - sl_price) < min_distance:
+                sl_price = entry_price - (min_distance * 1.5) if signal == "BUY" else entry_price + (min_distance * 1.5)
+            if abs(entry_price - tp_price) < min_distance:
+                tp_price = entry_price + (min_distance * 2) if signal == "BUY" else entry_price - (min_distance * 2)
+
+            # Préparation de l'ordre
+            trade_cmd = {
+                "command": "tradeTransaction",
+                "arguments": {
+                    "tradeTransInfo": {
+                        "cmd": 0 if signal == "BUY" else 1,
+                        "symbol": self.symbol,
+                        "volume": lot_min,
+                        "type": 0,
+                        "price": entry_price,
+                        "sl": sl_price,
+                        "tp": tp_price
+                    }
                 }
             }
-        }
 
-        logger.info(f"Envoi ordre: {json.dumps(trade_cmd, indent=2)}")
-        response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
-        logger.info(f"Réponse trade: {json.dumps(response, indent=2)}")
+            print(f"""🔍 Envoi de l'ordre:
+            - Type: {signal}
+            - Prix d'entrée: {entry_price}
+            - Stop Loss: {sl_price}
+            - Take Profit: {tp_price}""")
+
+            response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
         
-        if response and response.get('status'):
-            self.position_open = True
-            self.current_order_id = response.get('returnData', {}).get('order')
-            return True
+            if response.get('status'):
+                new_order_id = str(response.get('returnData', {}).get('order', 0))
+                self.active_positions.add(new_order_id)
+                print(f"""✅ Ordre exécuté avec succès:
+                - Order ID: {new_order_id}
+                - Type: {signal}
+                - Prix: {entry_price}
+                - SL: {sl_price}
+                - TP: {tp_price}""")
+            else:
+                print(f"❌ Erreur d'exécution: {response.get('errorDescr', 'Erreur inconnue')}")
             
-        return False
-        
-    except Exception as e:
-        logger.error(f"Erreur execution trade: {str(e)}")
-        return False
+        except Exception as e:
+            print(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
 
    def check_trade_status(self):
        try:
