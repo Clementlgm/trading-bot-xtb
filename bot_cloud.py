@@ -190,31 +190,30 @@ class XTBTradingBot:
            return None
 
    def check_trading_signals(self, df):
-        if len(df) < 50:
-            print("⚠️ Pas assez de données pour générer des signaux")
-            return None
+    if len(df) < 50:
+        logger.info("⚠️ Pas assez de données")
+        return None
             
-        last_row = df.iloc[-1]
-        
-        # Vérification des signaux d'achat/vente
-        buy_signal = (
-            last_row['SMA20'] > last_row['SMA50'] and
-            last_row['RSI'] < 70 and
-            last_row['close'] > last_row['SMA20']
-        )
-        
-        sell_signal = (
-            last_row['SMA20'] < last_row['SMA50'] and
-            last_row['RSI'] > 30 and
-            last_row['close'] < last_row['SMA20']
-        )
-        
-        if buy_signal:
-            return "BUY"
-        elif sell_signal:
-            return "SELL"
-        else:
-            return None
+    last_row = df.iloc[-1]
+    logger.info(f"""
+    Conditions actuelles:
+    - SMA20: {last_row['SMA20']} > SMA50: {last_row['SMA50']} = {last_row['SMA20'] > last_row['SMA50']}
+    - RSI: {last_row['RSI']} < 70 = {last_row['RSI'] < 70}
+    - Prix: {last_row['close']} > SMA20: {last_row['SMA20']} = {last_row['close'] > last_row['SMA20']}
+    """)
+    
+    buy_signal = (
+        last_row['SMA20'] > last_row['SMA50'] and
+        last_row['RSI'] < 70 and
+        last_row['close'] > last_row['SMA20']
+    )
+    
+    if buy_signal:
+        logger.info("🔵 SIGNAL ACHAT DÉTECTÉ")
+        return "BUY"
+    
+    logger.info("Pas de signal")
+    return None
        
    def get_symbol_info(self):
        try:
@@ -231,86 +230,49 @@ class XTBTradingBot:
            return {}
 
    def execute_trade(self, signal):
-        try:
-            # Vérification stricte des positions ouvertes
-            if self.get_active_positions():
-                print("⚠️ Position déjà ouverte. Pas de nouveau trade.")
-                return
-
-            symbol_info = self.get_symbol_info()
-            if not symbol_info:
-                print("❌ Impossible d'obtenir les informations du symbole")
-                return
-
-            # Récupération des prix et propriétés du symbole
-            ask_price = float(symbol_info.get('ask', 0))
-            bid_price = float(symbol_info.get('bid', 0))
-            lot_min = float(symbol_info.get('lotMin', 0.01))
-            lot_step = float(symbol_info.get('lotStep', 0.01))
+    if not self.check_connection():
+        logger.error("Pas de connexion")
+        return False
         
-            if ask_price <= 0 or bid_price <= 0:
-                print("❌ Prix invalides reçus du serveur")
-                return
+    try:
+        symbol_info = self.get_symbol_info()
+        ask_price = float(symbol_info.get('ask', 0))
+        bid_price = float(symbol_info.get('bid', 0))
+        lot_min = max(float(symbol_info.get('lotMin', 0.01)), 0.01)
 
-            # Calcul de la valeur du pip
-            precision = len(str(symbol_info.get('pipsPrecision', 5)))
-            pip_value = 1 / (10 ** precision)
-
-            # Configuration des SL et TP
-            if signal == "BUY":
-                entry_price = ask_price
-                sl_price = round(entry_price - 0.00100, 5)  # 10 pips en dessous
-                tp_price = round(entry_price + 0.00150, 5)  # 20 pips au-dessus
-            else:
-                entry_price = bid_price
-                sl_price = round(entry_price + 0.00100, 5)  # 10 pips au-dessus
-                tp_price = round(entry_price - 0.00150, 5)  # 20 pips en dessous
-
-            # Vérification des distances minimales
-            min_distance = float(symbol_info.get('spreadRaw', 0)) * 2
-            if abs(entry_price - sl_price) < min_distance:
-                sl_price = entry_price - (min_distance * 1.5) if signal == "BUY" else entry_price + (min_distance * 1.5)
-            if abs(entry_price - tp_price) < min_distance:
-                tp_price = entry_price + (min_distance * 2) if signal == "BUY" else entry_price - (min_distance * 2)
-
-            # Préparation de l'ordre
-            trade_cmd = {
-                "command": "tradeTransaction",
-                "arguments": {
-                    "tradeTransInfo": {
-                        "cmd": 0 if signal == "BUY" else 1,
-                        "symbol": self.symbol,
-                        "volume": lot_min,
-                        "type": 0,
-                        "price": entry_price,
-                        "sl": sl_price,
-                        "tp": tp_price
-                    }
+        trade_cmd = {
+            "command": "tradeTransaction",
+            "arguments": {
+                "tradeTransInfo": {
+                    "cmd": 0 if signal == "BUY" else 1,
+                    "customComment": "Bot Trade",
+                    "expiration": 0,
+                    "offset": 0,
+                    "order": 0,
+                    "price": ask_price if signal == "BUY" else bid_price,
+                    "sl": round(ask_price * 0.985 if signal == "BUY" else bid_price * 1.015, 5),
+                    "tp": round(ask_price * 1.02 if signal == "BUY" else bid_price * 0.98, 5),
+                    "symbol": self.symbol,
+                    "type": 0,
+                    "volume": lot_min
                 }
             }
+        }
 
-            print(f"""🔍 Envoi de l'ordre:
-            - Type: {signal}
-            - Prix d'entrée: {entry_price}
-            - Stop Loss: {sl_price}
-            - Take Profit: {tp_price}""")
-
-            response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
+        logger.info(f"Envoi ordre: {json.dumps(trade_cmd, indent=2)}")
+        response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
+        logger.info(f"Réponse trade: {json.dumps(response, indent=2)}")
         
-            if response.get('status'):
-                new_order_id = str(response.get('returnData', {}).get('order', 0))
-                self.active_positions.add(new_order_id)
-                print(f"""✅ Ordre exécuté avec succès:
-                - Order ID: {new_order_id}
-                - Type: {signal}
-                - Prix: {entry_price}
-                - SL: {sl_price}
-                - TP: {tp_price}""")
-            else:
-                print(f"❌ Erreur d'exécution: {response.get('errorDescr', 'Erreur inconnue')}")
+        if response and response.get('status'):
+            self.position_open = True
+            self.current_order_id = response.get('returnData', {}).get('order')
+            return True
             
-        except Exception as e:
-            print(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Erreur execution trade: {str(e)}")
+        return False
 
    def check_trade_status(self):
        try:
@@ -336,36 +298,62 @@ class XTBTradingBot:
            return False
 
    def run_strategy(self):
-        print(f"\n🤖 Démarrage du bot de trading sur {self.symbol}")
-        
-        while True:
-            try:
-                # Vérification stricte des positions au début de chaque cycle
-                has_positions = self.get_active_positions()
-                
-                if has_positions:
-                    print(f"📊 En attente de clôture des positions actives...")
-                    time.sleep(30)  # Attente plus courte quand des positions sont ouvertes
+    logging.info(f"🤖 Bot trading {self.symbol} démarré")
+    
+    while True:
+        try:
+            if not self.check_connection():
+                logging.error("Connexion perdue, tentative de reconnexion...")
+                if not self.connect():
+                    time.sleep(30)
                     continue
+                    
+            # Récupération des données
+            df = self.get_historical_data()
+            if df is not None:
+                logging.info(f"Données récupérées: {len(df)} périodes")
                 
-                # Si aucune position n'est ouverte, recherche de nouvelles opportunités
-                df = self.get_historical_data()
+                # Analyse des données
+                df = self.calculate_indicators(df)
                 if df is not None:
-                    df = self.calculate_indicators(df)
-                    if df is not None:
-                        signal = self.check_trading_signals(df)
-                        if signal:
-                            print(f"📊 Signal détecté: {signal}")
-                            self.execute_trade(signal)
+                    # Log des dernières valeurs
+                    last_row = df.iloc[-1]
+                    logging.info(f"""
+                    ===== État du marché =====
+                    Symbole: {self.symbol}
+                    Dernier prix: {last_row['close']}
+                    SMA20: {last_row['SMA20']}
+                    SMA50: {last_row['SMA50']}
+                    RSI: {last_row['RSI']}
+                    Position ouverte: {self.position_open}
+                    """)
+                    
+                    # Vérifie les positions ouvertes
+                    if self.position_open:
+                        if not self.check_trade_status():
+                            logging.info("🔄 Position fermée, prêt pour nouveau trade")
+                            self.position_open = False
+                            self.current_order_id = None
+                            
+                    # Recherche de signaux
+                    signal = self.check_trading_signals(df)
+                    if signal:
+                        logging.info(f"🎯 Signal détecté: {signal}")
+                        self.execute_trade(signal)
+                    else:
+                        logging.info("⏳ Pas de signal pour le moment")
+                else:
+                    logging.error("Erreur dans le calcul des indicateurs")
+            else:
+                logging.error("Erreur dans la récupération des données")
                 
-                print("⏳ Attente de 1 minute...")
-                time.sleep(60)
-                
-            except Exception as e:
-                print(f"❌ Erreur dans la boucle de trading: {str(e)}")
-                print("⏳ Attente de 30 secondes...")
-                time.sleep(30)
-                self.connect()
+            # Attente avant prochaine analyse
+            logging.info("--- Fin du cycle d'analyse ---")
+            time.sleep(60)
+            
+        except Exception as e:
+            logging.error(f"Erreur critique dans run_strategy: {str(e)}")
+            time.sleep(30)
 
 from flask import Flask, jsonify
 import os, logging
