@@ -244,7 +244,9 @@ def get_logs():
         logger.error(f"Erreur dans get_logs: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-
+@app.route("/logs")
+def get_logs():
+    verbose = request.args.get('verbose', 'false').lower() == 'true'
     
     # Démarre le serveur Flask
     port = int(os.environ.get("PORT", 8080))
