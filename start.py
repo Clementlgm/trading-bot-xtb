@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 from flask_cors import CORS
 import os
 import logging
@@ -67,7 +67,7 @@ def init_bot_if_needed():
                 logger.error("Identifiants XTB manquants")
                 return False
                 
-            bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+            bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
             if not bot.connect():
                 logger.error("Échec de la connexion initiale")
                 return False
@@ -156,105 +156,40 @@ def test_trade():
 
 @app.route("/logs", methods=['GET'])
 def get_logs():
+    logs = []
     try:
-        # Récupération du paramètre verbose
-        verbose = request.args.get('verbose', 'false').lower() == 'true'
-        
-        if not bot:
-            return jsonify({"error": "Bot non initialisé"}), 400
-
-        logs = []
-        
-        # État de la connexion
-        connection_status = "connecté" if bot.client else "déconnecté"
-        logs.append(f"🔌 État de la connexion : {connection_status}")
-        
-        # Vérification des positions actives
-        has_positions = bot.get_active_positions()
-        logs.append(f"📊 Positions actives : {'Oui' if has_positions else 'Non'}")
-        
-        # Récupération des données de marché
-        df = bot.get_historical_data()
-        if df is not None:
-            df = bot.calculate_indicators(df)
+        if bot:
+            logs.append(f"État du bot : {'connecté' if bot.client else 'déconnecté'}")
+            logs.append(f"Position ouverte : {bot.position_open}")
+            df = bot.get_historical_data()
             if df is not None:
-                last_row = df.iloc[-1]
-                
-                # Prix actuels
-                logs.append(f"""💰 Données de marché actuelles:
-                - Prix de clôture: {last_row['close']}
-                - SMA20: {last_row['SMA20']:.5f}
-                - SMA50: {last_row['SMA50']:.5f}
-                - RSI: {last_row['RSI']:.2f}""")
-                
-                # Analyse des conditions de trading
-                sma_condition = last_row['SMA20'] > last_row['SMA50']
-                rsi_buy_condition = last_row['RSI'] < 70
-                rsi_sell_condition = last_row['RSI'] > 30
-                price_sma_condition = last_row['close'] > last_row['SMA20']
-                
-                logs.append(f"""🔍 Analyse des conditions:
-                Pour un signal BUY:
-                - SMA20 > SMA50: {'✅' if sma_condition else '❌'} ({last_row['SMA20']:.5f} vs {last_row['SMA50']:.5f})
-                - RSI < 70: {'✅' if rsi_buy_condition else '❌'} ({last_row['RSI']:.2f})
-                - Prix > SMA20: {'✅' if price_sma_condition else '❌'} ({last_row['close']} vs {last_row['SMA20']:.5f})
-                
-                Pour un signal SELL:
-                - SMA20 < SMA50: {'✅' if not sma_condition else '❌'} ({last_row['SMA20']:.5f} vs {last_row['SMA50']:.5f})
-                - RSI > 30: {'✅' if rsi_sell_condition else '❌'} ({last_row['RSI']:.2f})
-                - Prix < SMA20: {'✅' if not price_sma_condition else '❌'} ({last_row['close']} vs {last_row['SMA20']:.5f})""")
-                
-                if verbose:
-                    # Ajouter plus de détails en mode verbose
-                    logs.append(f"""📊 Détails supplémentaires:
-                    - Spread actuel: {last_row['high'] - last_row['low']}
-                    - Volume: {last_row.get('vol', 'N/A')}
-                    - Timestamp: {last_row['timestamp']}""")
-                
-                # Infos sur les ordres en cours
-                if has_positions:
-                    cmd = {
-                        "command": "getTrades",
-                        "arguments": {
-                            "openedOnly": True
-                        }
-                    }
-                    trades = bot.client.commandExecute(cmd["command"], cmd["arguments"])
-                    if trades and 'returnData' in trades:
-                        for trade in trades['returnData']:
-                            if trade.get('symbol') == bot.symbol:
-                                logs.append(f"""📈 Détails de la position ouverte:
-                                - Type: {'ACHAT' if trade.get('cmd') == 0 else 'VENTE'}
-                                - Prix d'entrée: {trade.get('open_price')}
-                                - Stop Loss: {trade.get('sl')}
-                                - Take Profit: {trade.get('tp')}
-                                - Volume: {trade.get('volume')}
-                                - Profit actuel: {trade.get('profit')}""")
-                
-                # État du compte
-                account_info = bot.client.commandExecute("getMarginLevel")
-                if account_info and 'returnData' in account_info:
-                    balance = account_info['returnData']
-                    logs.append(f"""💳 État du compte:
-                    - Balance: {balance.get('balance')}
-                    - Equity: {balance.get('equity')}
-                    - Margin: {balance.get('margin')}""")
-                
-            else:
-                logs.append("❌ Erreur dans le calcul des indicateurs")
-        else:
-            logs.append("❌ Erreur dans la récupération des données historiques")
-            
-        return jsonify({
-            "logs": logs,
-            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
-        })
-        
+                df = bot.calculate_indicators(df)  # Calcul des indicateurs
+                if df is not None:
+                    last_row = df.iloc[-1]
+                    logs.append(f"""
+                    Dernières valeurs:
+                    - Prix: {last_row['close']}
+                    - SMA20: {last_row['SMA20']}
+                    - SMA50: {last_row['SMA50']}
+                    - RSI: {last_row['RSI']}
+                    """)
+        return jsonify({"logs": logs})
     except Exception as e:
-        logger.error(f"Erreur dans get_logs: {str(e)}")
         return jsonify({"error": str(e)}), 500
-    
+
+if __name__ == "__main__":
+    # Démarre le thread de trading
+    try:
+        if init_bot_if_needed():
+            trading_thread = Thread(target=run_trading, daemon=True)
+            trading_thread.start()
+            logger.info("Thread de trading démarré")
+    except Exception as e:
+        logger.error(f"Erreur au démarrage: {str(e)}")
+
     # Démarre le serveur Flask
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
+    
+
     
