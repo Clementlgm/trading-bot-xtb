@@ -310,50 +310,32 @@ class XTBTradingBot:
            logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
            return False
 
-   def run_strategy(self):
-    logger.info(f"\n🤖 Exécution du cycle de trading sur {self.symbol}")
+   def run_trading():
+    global bot
+    logger.info("🚀 Démarrage du thread de trading")
     
-    try:
-        # 1. Vérification de la connexion
-        if not self.check_connection():
-            logger.error("❌ Pas de connexion")
-            return
+    while True:
+        try:
+            with bot_lock:
+                if bot and bot.check_connection():
+                    logger.info("🔄 Exécution du cycle de trading")
+                    bot.run_strategy()
+                else:
+                    logger.warning("⚠️ Bot non connecté, tentative de réinitialisation")
+                    if init_bot_if_needed():
+                        logger.info("✅ Bot réinitialisé avec succès")
+                    else:
+                        logger.error("❌ Échec de la réinitialisation")
+                        time.sleep(30)
+                        continue
+                        
+            # Attendre 1 minute avant le prochain cycle
+            logger.info("⏳ Attente avant le prochain cycle...")
+            time.sleep(60)
             
-        # 2. Vérification des positions existantes
-        has_positions = self.get_active_positions()
-        if has_positions:
-            logger.info("📊 Position active détectée, attente...")
-            return
-
-        # 3. Récupération et analyse des données
-        logger.info("🔄 Récupération des données...")
-        df = self.get_historical_data()
-        if df is None:
-            logger.error("❌ Impossible d'obtenir les données historiques")
-            return
-            
-        logger.info("📊 Calcul des indicateurs...")
-        df = self.calculate_indicators(df)
-        if df is None:
-            logger.error("❌ Erreur dans le calcul des indicateurs")
-            return
-
-        # 4. Vérification des signaux
-        logger.info("🔍 Analyse des signaux...")
-        signal = self.check_trading_signals(df)
-        
-        # 5. Exécution si signal
-        if signal:
-            logger.info(f"🎯 Signal {signal} détecté! Tentative d'exécution...")
-            if self.execute_trade(signal):
-                logger.info("✅ Trade exécuté avec succès!")
-            else:
-                logger.error("❌ Échec de l'exécution du trade")
-        else:
-            logger.info("⏳ Pas de signal pour le moment")
-            
-    except Exception as e:
-        logger.error(f"❌ Erreur dans run_strategy: {str(e)}")
+        except Exception as e:
+            logger.error(f"❌ Erreur dans run_trading: {str(e)}")
+            time.sleep(30)
 
 from flask import Flask, jsonify
 import os, logging
