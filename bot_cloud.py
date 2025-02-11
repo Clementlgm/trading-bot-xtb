@@ -185,6 +185,18 @@ class XTBTradingBot:
         return None
             
     last_row = df.iloc[-1]
+    sma_condition = last_row['SMA20'] > last_row['SMA50']
+    price_condition = last_row['close'] > last_row['SMA20']
+    
+    logger.info(f"""
+    Conditions détaillées:
+    - Prix actuel: {last_row['close']}
+    - SMA20: {last_row['SMA20']}
+    - SMA50: {last_row['SMA50']}
+    - Price > SMA20: {price_condition}
+    - SMA20 > SMA50: {sma_condition}
+    """)
+       
     logger.info(f"""
     Conditions actuelles:
     - SMA20: {last_row['SMA20']} > SMA50: {last_row['SMA50']} = {last_row['SMA20'] > last_row['SMA50']}
