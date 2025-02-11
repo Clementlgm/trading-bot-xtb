@@ -145,24 +145,34 @@ class XTBTradingBot:
             if 'rateInfos' in data and len(data['rateInfos']) > 0:
                 df = pd.DataFrame(data['rateInfos'])
                 
-                # S'assurer que les colonnes de prix sont des flottants positifs
+                # Convertir les données brutes en prix réels
                 for col in ['close', 'open', 'high', 'low']:
-                    df[col] = pd.to_numeric(df[col], errors='coerce') / 10000
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+                    # Conversion spécifique pour EURUSD
+                    if self.symbol == 'EURUSD':
+                        df[col] = (df[col] + 10000) / 100000  # Correction pour les valeurs négatives
+                    else:
+                        df[col] = df[col] / 10000
                 
+                # Conversion des timestamps
                 df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
                 df = df.set_index('timestamp').sort_index()
                 
-                # Log pour debugging
-                logger.info(f"Données traitées:")
-                logger.info(f"Premier prix: {df['close'].iloc[0]}")
-                logger.info(f"Dernier prix: {df['close'].iloc[-1]}")
-                logger.info(f"Min prix: {df['close'].min()}")
-                logger.info(f"Max prix: {df['close'].max()}")
+                # Log des valeurs pour debugging
+                logger.info(f"""
+                Données traitées:
+                - Premier prix: {df['close'].iloc[0]}
+                - Dernier prix: {df['close'].iloc[-1]}
+                - Min prix: {df['close'].min()}
+                - Max prix: {df['close'].max()}
+                - Nombre de périodes: {len(df)}
+                """)
                 
                 return df
                 
         logger.error("Pas de données historiques reçues")
         return None
+        
     except Exception as e:
         logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
         return None
