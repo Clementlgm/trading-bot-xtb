@@ -79,24 +79,25 @@ def init_bot_if_needed():
         logger.error(f"Erreur d'initialisation: {str(e)}")
         return False
 
-def run_trading():
-    global bot
+def run_trading_thread():
     logger.info("Démarrage du thread de trading")
     while True:
         try:
             with bot_lock:
                 if bot and bot.check_connection():
-                    bot.run_strategy()
-                    bot_status["last_check"] = time.time()
+                    success = bot.run_strategy()
+                    if not success:
+                        logger.warning("Échec de l'exécution de la stratégie")
                 else:
                     if init_bot_if_needed():
                         logger.info("Bot réinitialisé avec succès")
                     else:
                         logger.error("Échec de la réinitialisation")
                         time.sleep(30)
-            time.sleep(5)
+            # Attente avant la prochaine itération
+            time.sleep(60)  # Vérifie toutes les minutes
         except Exception as e:
-            logger.error(f"Erreur dans run_trading: {str(e)}")
+            logger.error(f"Erreur dans le thread de trading: {str(e)}")
             time.sleep(10)
 
 @app.route("/")
