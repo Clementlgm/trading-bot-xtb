@@ -297,63 +297,62 @@ class XTBTradingBot:
            logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
            return False
 
-   def run_strategy(self):
-    logging.info(f"🤖 Bot trading {self.symbol} démarré")
+   def run_trading(self):
+    logger.info(f"🤖 Bot trading {self.symbol} démarré")
     
-    while True:
-        try:
-            if not self.check_connection():
-                logging.error("Connexion perdue, tentative de reconnexion...")
-                if not self.connect():
-                    time.sleep(30)
-                    continue
-                    
-            # Récupération des données
-            df = self.get_historical_data()
-            if df is not None:
-                logging.info(f"Données récupérées: {len(df)} périodes")
+    try:
+        if not self.check_connection():
+            logger.error("Connexion perdue, tentative de reconnexion...")
+            if not self.connect():
+                return False
                 
-                # Analyse des données
-                df = self.calculate_indicators(df)
-                if df is not None:
-                    # Log des dernières valeurs
-                    last_row = df.iloc[-1]
-                    logging.info(f"""
-                    ===== État du marché =====
-                    Symbole: {self.symbol}
-                    Dernier prix: {last_row['close']}
-                    SMA20: {last_row['SMA20']}
-                    SMA50: {last_row['SMA50']}
-                    RSI: {last_row['RSI']}
-                    Position ouverte: {self.position_open}
-                    """)
-                    
-                    # Vérifie les positions ouvertes
-                    if self.position_open:
-                        if not self.check_trade_status():
-                            logging.info("🔄 Position fermée, prêt pour nouveau trade")
-                            self.position_open = False
-                            self.current_order_id = None
-                            
-                    # Recherche de signaux
-                    signal = self.check_trading_signals(df)
-                    if signal:
-                        logging.info(f"🎯 Signal détecté: {signal}")
-                        self.execute_trade(signal)
-                    else:
-                        logging.info("⏳ Pas de signal pour le moment")
-                else:
-                    logging.error("Erreur dans le calcul des indicateurs")
-            else:
-                logging.error("Erreur dans la récupération des données")
-                
-            # Attente avant prochaine analyse
-            logging.info("--- Fin du cycle d'analyse ---")
-            time.sleep(60)
+        # Récupération des données
+        df = self.get_historical_data()
+        if df is None:
+            logger.error("Impossible de récupérer les données historiques")
+            return False
             
-        except Exception as e:
-            logging.error(f"Erreur critique dans run_strategy: {str(e)}")
-            time.sleep(30)
+        # Analyse des données
+        df = self.calculate_indicators(df)
+        if df is None:
+            logger.error("Erreur dans le calcul des indicateurs")
+            return False
+            
+        # Log des dernières valeurs
+        last_row = df.iloc[-1]
+        logger.info(f"""
+        ===== État du marché =====
+        Symbole: {self.symbol}
+        Dernier prix: {last_row['close']}
+        SMA20: {last_row['SMA20']}
+        SMA50: {last_row['SMA50']}
+        RSI: {last_row['RSI']}
+        Position ouverte: {self.position_open}
+        """)
+        
+        # Vérifie les positions ouvertes
+        if self.position_open:
+            if not self.check_trade_status():
+                logger.info("🔄 Position fermée, prêt pour nouveau trade")
+                self.position_open = False
+                self.current_order_id = None
+                
+        # Recherche de signaux
+        if not self.position_open:  # Vérifie qu'il n'y a pas de position ouverte
+            signal = self.check_trading_signals(df)
+            if signal:
+                logger.info(f"🎯 Signal détecté: {signal}")
+                if self.execute_trade(signal):
+                    logger.info("Trade exécuté avec succès")
+                    return True
+            else:
+                logger.info("⏳ Pas de signal pour le moment")
+                
+        return True
+            
+    except Exception as e:
+        logger.error(f"Erreur critique dans run_strategy: {str(e)}")
+        return False
 
 from flask import Flask, jsonify
 import os, logging
