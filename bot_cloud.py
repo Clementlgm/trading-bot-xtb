@@ -120,27 +120,50 @@ class XTBTradingBot:
     try:
         if not self.check_connection():
             return None
-            
+
+        end = int(time.time() * 1000)
+        start = end - (limit * 3600 * 1000)  # Convertir les heures en millisecondes
+        
         command = {
-            'info': {
-                'symbol': self.symbol,
-                'period': 1,
-                'start': int(time.time() * 1000) - (limit * 3600 * 1000),
+            "command": "getChartRangeRequest",
+            "arguments": {
+                "info": {
+                    "symbol": self.symbol,
+                    "period": 1,
+                    "start": start,
+                    "end": end
+                }
             }
         }
         
-        response = self.client.commandExecute('getChartLastRequest', command)
+        logger.info(f"Demande données historiques: {json.dumps(command, indent=2)}")
+        response = self.client.commandExecute(command["command"], command["arguments"])
+        logger.info(f"Réponse données historiques: {json.dumps(response, indent=2)}")
         
         if isinstance(response, dict) and 'returnData' in response:
             data = response['returnData']
-            if 'rateInfos' in data:
+            if 'rateInfos' in data and len(data['rateInfos']) > 0:
                 df = pd.DataFrame(data['rateInfos'])
-                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
-                df = df.set_index('timestamp').sort_index()  # Ensuite définir l'index
-
-                return df.sort_values('timestamp')
-        return None
                 
+                # S'assurer que les colonnes de prix sont des flottants positifs
+                price_columns = ['close', 'open', 'high', 'low']
+                for col in price_columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce').abs()
+                
+                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
+                df = df.set_index('timestamp').sort_index()
+                
+                # Log pour debugging
+                logger.info(f"Données traitées:")
+                logger.info(f"Premier prix: {df['close'].iloc[0]}")
+                logger.info(f"Dernier prix: {df['close'].iloc[-1]}")
+                logger.info(f"Min prix: {df['close'].min()}")
+                logger.info(f"Max prix: {df['close'].max()}")
+                
+                return df
+                
+        logger.error("Pas de données historiques reçues")
+        return None
     except Exception as e:
         logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
         return None
