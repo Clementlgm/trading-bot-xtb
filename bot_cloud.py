@@ -146,21 +146,31 @@ class XTBTradingBot:
         return None
 
    def calculate_indicators(self, df):
-       try:
-           df = df.copy()
-           df['SMA20'] = df['close'].rolling(window=20).mean()
-           df['SMA50'] = df['close'].rolling(window=50).mean()
-           
-           delta = df['close'].diff()
-           gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-           loss = (delta.where(delta < 0, 0)).rolling(window=14).mean()
-           rs = gain / loss
-           df['RSI'] = 100 - (100 / (1 + rs))
-           
-           return df
-       except Exception as e:
-           logging.error(f"❌ Erreur lors du calcul des indicateurs: {str(e)}")
-           return None
+    try:
+        df = df.copy()
+        # Assurez-vous que 'close' est numérique
+        df['close'] = pd.to_numeric(df['close'], errors='coerce')
+        
+        # Recalcul des SMA en utilisant uniquement les valeurs valides
+        df['SMA20'] = df['close'].rolling(window=20, min_periods=1).mean()
+        df['SMA50'] = df['close'].rolling(window=50, min_periods=1).mean()
+        
+        # Calcul du RSI
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14, min_periods=1).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14, min_periods=1).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+        
+        # Remplacer les valeurs NaN par des valeurs appropriées
+        df['SMA20'].fillna(df['close'], inplace=True)
+        df['SMA50'].fillna(df['close'], inplace=True)
+        df['RSI'].fillna(50, inplace=True)
+        
+        return df
+    except Exception as e:
+        logging.error(f"❌ Erreur lors du calcul des indicateurs: {str(e)}")
+        return None
 
    def check_trading_signals(self, df):
     if len(df) < 50:
