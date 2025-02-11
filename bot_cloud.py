@@ -204,9 +204,9 @@ class XTBTradingBot:
     """)
     
     buy_signal = (
-        last_row['SMA20'] > last_row['SMA50'] and
+        #last_row['SMA20'] > last_row['SMA50'] and
         last_row['RSI'] < 70 and
-        last_row['close'] > last_row['SMA20']
+        #last_row['close'] > last_row['SMA20']
     )
     
     if buy_signal:
