@@ -120,44 +120,25 @@ class XTBTradingBot:
     try:
         if not self.check_connection():
             return None
-
-        end = int(time.time() * 1000)
-        start = end - (limit * 3600 * 1000)  # Convertir les heures en millisecondes
-        
+            
         command = {
-            "command": "getChartRangeRequest",
-            "arguments": {
-                "info": {
-                    "symbol": self.symbol,
-                    "period": 1,
-                    "start": start,
-                    "end": end
-                }
+            'info': {
+                'symbol': self.symbol,
+                'period': 1,
+                'start': int(time.time() * 1000) - (limit * 3600 * 1000),
             }
         }
         
-        logger.info(f"Demande données historiques: {json.dumps(command, indent=2)}")
-        response = self.client.commandExecute(command["command"], command["arguments"])
-        logger.info(f"Réponse données historiques: {json.dumps(response, indent=2)}")
+        response = self.client.commandExecute('getChartLastRequest', command)
         
         if isinstance(response, dict) and 'returnData' in response:
             data = response['returnData']
-            if 'rateInfos' in data and len(data['rateInfos']) > 0:
+            if 'rateInfos' in data:
                 df = pd.DataFrame(data['rateInfos'])
-                df['close'] = pd.to_numeric(df['close'], errors='coerce')
-                df['open'] = pd.to_numeric(df['open'], errors='coerce')
-                df['high'] = pd.to_numeric(df['high'], errors='coerce')
-                df['low'] = pd.to_numeric(df['low'], errors='coerce')
-                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')  # D'abord créer timestamp
-                df = df.set_index('timestamp').sort_index()  # Ensuite définir l'index
-                
-                logger.info(f"Premier prix: {df['close'].iloc[0]}")
-                logger.info(f"Dernier prix: {df['close'].iloc[-1]}")
-                
+                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
                 return df.sort_values('timestamp')
-                
-        logger.error("Pas de données historiques reçues")
         return None
+                
     except Exception as e:
         logger.error(f"❌ Erreur dans get_historical_data: {str(e)}")
         return None
@@ -284,79 +265,42 @@ class XTBTradingBot:
         return False
 
    def check_trade_status(self):
-       try:
-           if not self.current_order_id:
-               return False
-           
-           cmd = {
-               "command": "getTrades",
-               "arguments": {
-                   "openedOnly": True
-               }
-           }
-           response = self.client.commandExecute(cmd["command"], cmd["arguments"])
-       
-           if not response or 'returnData' not in response:
-               return False
-           
-           trades = response['returnData']
-           return any(trade.get('order2') == self.current_order_id for trade in trades)
-       
-       except Exception as e:
-           logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
-           return False
+    try:
+        cmd = {
+            "command": "getTrades",
+            "arguments": {
+                "openedOnly": True
+            }
+        }
+        response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+    
+        if response and 'returnData' in response:
+            trades = response['returnData']
+            return len(trades) > 0
+        return False
+    
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
+        return False
 
    def run_trading(self):
-    logger.info(f"🤖 Bot trading {self.symbol} démarré")
-    
     try:
         if not self.check_connection():
-            logger.error("Connexion perdue, tentative de reconnexion...")
-            if not self.connect():
-                return False
+            return False
                 
-        # Récupération des données
+        if self.check_trade_status():
+            logger.info("Position ouverte, attente...")
+            return True
+                
         df = self.get_historical_data()
-        if df is None:
-            logger.error("Impossible de récupérer les données historiques")
-            return False
-            
-        # Analyse des données
-        df = self.calculate_indicators(df)
-        if df is None:
-            logger.error("Erreur dans le calcul des indicateurs")
-            return False
-            
-        # Log des dernières valeurs
-        last_row = df.iloc[-1]
-        logger.info(f"""
-        ===== État du marché =====
-        Symbole: {self.symbol}
-        Dernier prix: {last_row['close']}
-        SMA20: {last_row['SMA20']}
-        SMA50: {last_row['SMA50']}
-        RSI: {last_row['RSI']}
-        Position ouverte: {self.position_open}
-        """)
-        
-        # Vérifie les positions ouvertes
-        if self.position_open:
-            if not self.check_trade_status():
-                logger.info("🔄 Position fermée, prêt pour nouveau trade")
-                self.position_open = False
-                self.current_order_id = None
-                
-        # Recherche de signaux
-        if not self.position_open:  # Vérifie qu'il n'y a pas de position ouverte
-            signal = self.check_trading_signals(df)
-            if signal:
-                logger.info(f"🎯 Signal détecté: {signal}")
-                if self.execute_trade(signal):
-                    logger.info("Trade exécuté avec succès")
-                    return True
-            else:
-                logger.info("⏳ Pas de signal pour le moment")
-                
+        if df is not None:
+            df = self.calculate_indicators(df)
+            if df is not None:
+                signal = self.check_trading_signals(df)
+                if signal:
+                    logger.info(f"🎯 Signal détecté: {signal}")
+                    self.execute_trade(signal)
+                    
         return True
             
     except Exception as e:
