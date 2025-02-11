@@ -136,6 +136,8 @@ class XTBTradingBot:
             if 'rateInfos' in data:
                 df = pd.DataFrame(data['rateInfos'])
                 df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
+                df = df.set_index('timestamp').sort_index()  # Ensuite définir l'index
+
                 return df.sort_values('timestamp')
         return None
                 
@@ -148,9 +150,6 @@ class XTBTradingBot:
            df = df.copy()
            df['SMA20'] = df['close'].rolling(window=20).mean()
            df['SMA50'] = df['close'].rolling(window=50).mean()
-           
-           df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')  # D'abord créer timestamp
-           df = df.set_index('timestamp').sort_index()  # Ensuite définir l'index
            
            delta = df['close'].diff()
            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
