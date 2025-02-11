@@ -248,7 +248,7 @@ def debug_bot():
                 "price_condition": str(price_condition),  # Conversion en string
                 "signal_generated": str(signal is not None),  # Conversion en string
                 "signal_type": signal
-            }
+            },
             "account_status": account_info,
             "position_status": position_status,
             "data_info": {
