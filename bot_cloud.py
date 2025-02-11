@@ -146,9 +146,8 @@ class XTBTradingBot:
                 df = pd.DataFrame(data['rateInfos'])
                 
                 # S'assurer que les colonnes de prix sont des flottants positifs
-                price_columns = ['close', 'open', 'high', 'low']
-                for col in price_columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').abs()
+                for col in ['close', 'open', 'high', 'low']:
+                    df[col] = pd.to_numeric(df[col], errors='coerce') / 10000
                 
                 df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
                 df = df.set_index('timestamp').sort_index()
