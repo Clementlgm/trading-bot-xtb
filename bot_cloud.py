@@ -155,6 +155,7 @@ class XTBTradingBot:
             data = response['returnData']
             if 'rateInfos' in data and len(data['rateInfos']) > 0:
                 df = pd.DataFrame(data['rateInfos'])
+                df = df.set_index('timestamp').sort_index()
                 df['close'] = pd.to_numeric(df['close'], errors='coerce')
                 df['open'] = pd.to_numeric(df['open'], errors='coerce')
                 df['high'] = pd.to_numeric(df['high'], errors='coerce')
