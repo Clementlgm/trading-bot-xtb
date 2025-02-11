@@ -155,12 +155,13 @@ class XTBTradingBot:
             data = response['returnData']
             if 'rateInfos' in data and len(data['rateInfos']) > 0:
                 df = pd.DataFrame(data['rateInfos'])
-                df = df.set_index('timestamp').sort_index()
                 df['close'] = pd.to_numeric(df['close'], errors='coerce')
                 df['open'] = pd.to_numeric(df['open'], errors='coerce')
                 df['high'] = pd.to_numeric(df['high'], errors='coerce')
                 df['low'] = pd.to_numeric(df['low'], errors='coerce')
                 df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
+                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')  # D'abord créer timestamp
+                df = df.set_index('timestamp').sort_index()  # Ensuite définir l'index
                 
                 logger.info(f"Premier prix: {df['close'].iloc[0]}")
                 logger.info(f"Dernier prix: {df['close'].iloc[-1]}")
