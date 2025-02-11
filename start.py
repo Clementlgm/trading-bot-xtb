@@ -243,12 +243,12 @@ def debug_bot():
                 "rsi": float(last_row['RSI'])
             },
             "trading_conditions": {
-                "sma_condition": sma_condition,
-                "rsi_condition": rsi_condition,
-                "price_condition": price_condition,
-                "signal_generated": signal is not None,
+                "sma_condition": str(sma_condition),  # Conversion en string
+                "rsi_condition": str(rsi_condition),  # Conversion en string
+                "price_condition": str(price_condition),  # Conversion en string
+                "signal_generated": str(signal is not None),  # Conversion en string
                 "signal_type": signal
-            },
+            }
             "account_status": account_info,
             "position_status": position_status,
             "data_info": {
