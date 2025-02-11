@@ -159,7 +159,6 @@ class XTBTradingBot:
                 df['open'] = pd.to_numeric(df['open'], errors='coerce')
                 df['high'] = pd.to_numeric(df['high'], errors='coerce')
                 df['low'] = pd.to_numeric(df['low'], errors='coerce')
-                df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')
                 df['timestamp'] = pd.to_datetime(df['ctm'], unit='ms')  # D'abord créer timestamp
                 df = df.set_index('timestamp').sort_index()  # Ensuite définir l'index
                 
