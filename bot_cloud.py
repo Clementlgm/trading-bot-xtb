@@ -197,14 +197,21 @@ class XTBTradingBot:
         last_row['RSI'] < 70 and
         last_row['close'] > last_row['SMA20']
     )
-    
+        
+    sell_signal = (
+        last_row['SMA20'] < last_row['SMA50'] and
+        last_row['RSI'] > 30 and
+        last_row['close'] < last_row['SMA20']
+    )
+        
     if buy_signal:
-        logger.info("🔵 SIGNAL ACHAT DÉTECTÉ")
         return "BUY"
+    elif sell_signal:
+        return "SELL"
+    else:
+        return None
+
     
-    logger.info("Pas de signal")
-    return None
-       
    def get_symbol_info(self):
        try:
            cmd = {
