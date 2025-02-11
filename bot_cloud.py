@@ -66,17 +66,6 @@ class XTBTradingBot:
         logging.error(f"❌ Erreur de connexion: {str(e)}")
         return False
 
-   #def check_connection(self):
-    #try:
-        #if self.client is None:
-         #   return self.connect()
-        
-        #response = self.client.commandExecute("ping")
-        #return response and response.get('status')
-    #except Exception as e:
-        #logging.error(f"❌ Erreur de vérification de connexion: {str(e)}")
-        #return False
-
    def check_connection(self):
     try:
         if self.client is None:
@@ -204,9 +193,9 @@ class XTBTradingBot:
     """)
     
     buy_signal = (
-        #last_row['SMA20'] > last_row['SMA50'] and
+        last_row['SMA20'] > last_row['SMA50'] and
         last_row['RSI'] < 70 and
-        #last_row['close'] > last_row['SMA20']
+        last_row['close'] > last_row['SMA20']
     )
     
     if buy_signal:
