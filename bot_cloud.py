@@ -210,43 +210,44 @@ class XTBTradingBot:
         return None
             
     last_row = df.iloc[-1]
-    sma_condition = last_row['SMA20'] > last_row['SMA50']
-    price_condition = last_row['close'] > last_row['SMA20']
     
-    logger.info(f"""
-    Conditions détaillées:
-    - Prix actuel: {last_row['close']}
-    - SMA20: {last_row['SMA20']}
-    - SMA50: {last_row['SMA50']}
-    - Price > SMA20: {price_condition}
-    - SMA20 > SMA50: {sma_condition}
-    """)
-       
-    logger.info(f"""
-    Conditions actuelles:
-    - SMA20: {last_row['SMA20']} > SMA50: {last_row['SMA50']} = {last_row['SMA20'] > last_row['SMA50']}
-    - RSI: {last_row['RSI']} < 70 = {last_row['RSI'] < 70}
-    - Prix: {last_row['close']} > SMA20: {last_row['SMA20']} = {last_row['close'] > last_row['SMA20']}
-    """)
+    # Conditions pour l'achat
+    buy_sma_condition = last_row['SMA20'] > last_row['SMA50']
+    buy_price_condition = last_row['close'] > last_row['SMA20']
+    buy_rsi_condition = last_row['RSI'] < 70
     
-    buy_signal = (
-        last_row['SMA20'] > last_row['SMA50'] and
-        last_row['RSI'] < 70 and
-        last_row['close'] > last_row['SMA20']
-    )
-        
-    sell_signal = (
-        last_row['SMA20'] < last_row['SMA50'] and
-        last_row['RSI'] > 30 and
-        last_row['close'] < last_row['SMA20']
-    )
-        
+    # Conditions pour la vente
+    sell_sma_condition = last_row['SMA20'] < last_row['SMA50']
+    sell_price_condition = last_row['close'] < last_row['SMA20']
+    sell_rsi_condition = last_row['RSI'] > 30
+    
+    buy_signal = buy_sma_condition and buy_price_condition and buy_rsi_condition
+    sell_signal = sell_sma_condition and sell_price_condition and sell_rsi_condition
+    
+    signal_type = None
     if buy_signal:
-        return "BUY"
+        signal_type = "BUY"
+        conditions = {
+            "sma_condition": str(buy_sma_condition),
+            "price_condition": str(buy_price_condition),
+            "rsi_condition": str(buy_rsi_condition)
+        }
     elif sell_signal:
-        return "SELL"
-    else:
-        return None
+        signal_type = "SELL"
+        conditions = {
+            "sma_condition": str(sell_sma_condition),
+            "price_condition": str(sell_price_condition),
+            "rsi_condition": str(sell_rsi_condition)
+        }
+    
+    logger.info(f"""
+    Conditions actuelles pour {signal_type if signal_type else 'aucun signal'}:
+    - SMA20: {last_row['SMA20']} {'>' if signal_type == 'BUY' else '<'} SMA50: {last_row['SMA50']}
+    - Prix: {last_row['close']} {'>' if signal_type == 'BUY' else '<'} SMA20: {last_row['SMA20']}
+    - RSI: {last_row['RSI']} {'<' if signal_type == 'BUY' else '>'} {70 if signal_type == 'BUY' else 30}
+    """)
+    
+    return signal_type
 
     
    def get_symbol_info(self):
