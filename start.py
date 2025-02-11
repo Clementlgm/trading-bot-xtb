@@ -177,6 +177,92 @@ def get_logs():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/debug", methods=['GET'])
+def debug_bot():
+    try:
+        if not bot:
+            return jsonify({
+                "status": "error",
+                "message": "Bot non initialisé"
+            }), 500
+
+        # Vérification de la connexion
+        connection_status = bot.check_connection()
+        
+        # Récupération des données historiques
+        df = bot.get_historical_data()
+        
+        if df is None:
+            return jsonify({
+                "status": "error",
+                "message": "Impossible de récupérer les données historiques",
+                "connection_status": connection_status
+            }), 500
+            
+        # Calcul des indicateurs
+        df_with_indicators = bot.calculate_indicators(df)
+        
+        if df_with_indicators is None:
+            return jsonify({
+                "status": "error",
+                "message": "Erreur dans le calcul des indicateurs",
+                "data_shape": df.shape if df is not None else None
+            }), 500
+            
+        # Dernières valeurs des indicateurs
+        last_row = df_with_indicators.iloc[-1]
+        
+        # Vérification des conditions de trading
+        sma_condition = last_row['SMA20'] > last_row['SMA50']
+        rsi_condition = last_row['RSI'] < 70
+        price_condition = last_row['close'] > last_row['SMA20']
+        
+        # Vérification du signal
+        signal = bot.check_trading_signals(df_with_indicators)
+        
+        # État du compte
+        account_info = bot.check_account_status()
+        
+        # Vérification des positions ouvertes
+        position_status = bot.check_trade_status()
+
+        return jsonify({
+            "status": "success",
+            "bot_state": {
+                "connection": connection_status,
+                "symbol": bot.symbol,
+                "timeframe": bot.timeframe,
+                "position_open": bot.position_open,
+                "current_order_id": bot.current_order_id
+            },
+            "market_data": {
+                "last_price": float(last_row['close']),
+                "sma20": float(last_row['SMA20']),
+                "sma50": float(last_row['SMA50']),
+                "rsi": float(last_row['RSI'])
+            },
+            "trading_conditions": {
+                "sma_condition": sma_condition,
+                "rsi_condition": rsi_condition,
+                "price_condition": price_condition,
+                "signal_generated": signal is not None,
+                "signal_type": signal
+            },
+            "account_status": account_info,
+            "position_status": position_status,
+            "data_info": {
+                "total_periods": len(df),
+                "last_update": df.index[-1].strftime('%Y-%m-%d %H:%M:%S') if not df.empty else None
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Erreur dans debug_bot: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
 if __name__ == "__main__":
     # Démarre le thread de trading
     try:
