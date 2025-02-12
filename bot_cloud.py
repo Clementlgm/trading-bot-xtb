@@ -92,17 +92,49 @@ class XTBTradingBot:
         logger.error(f"Erreur de connexion: {str(e)}")
         return self.connect()
 
-   def disconnect(self):
-    try:
-        if self.streaming:
-            self.streaming.disconnect()
-        if self.client:
-            self.client.disconnect()
-    except Exception as e:
-        logger.error(f"Erreur lors de la déconnexion: {str(e)}")
-    finally:
-        self.streaming = None
-        self.client = None
+   def check_connection(self):
+        """Vérifie et renouvelle la connexion si nécessaire"""
+        current_time = time.time()
+        if current_time - self.last_reconnect > self.reconnect_interval:
+            print("🔄 Renouvellement de la connexion...")
+            try:
+                self.client.disconnect()
+            except:
+                pass
+            return self.connect()
+        return True
+
+    def get_active_positions(self):
+        """Récupère toutes les positions actuellement ouvertes"""
+        try:
+            if not self.check_connection():
+                return False
+
+            cmd = {
+                "command": "getTrades",
+                "arguments": {
+                    "openedOnly": True
+                }
+            }
+            response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+            
+            if response and 'returnData' in response:
+                # Mise à jour de l'ensemble des positions actives
+                self.active_positions = {
+                    str(trade['order']) 
+                    for trade in response['returnData'] 
+                    if trade.get('symbol') == self.symbol
+                }
+                
+                if self.active_positions:
+                    print(f"📊 Positions actives trouvées: {len(self.active_positions)}")
+                return len(self.active_positions) > 0
+            
+            return False
+            
+        except Exception as e:
+            print(f"❌ Erreur lors de la vérification des positions: {str(e)}")
+            return False
         
    def check_account_status(self):
     try:
