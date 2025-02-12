@@ -390,18 +390,18 @@ def status():
     })
 
 if __name__ == "__main__":
-    init_bot()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))                
-
-if __name__ == "__main__":
-   while True:
-       try:
-           bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
-           if bot.connect():
-               bot.run_strategy()
-           else:
-               logging.error("Échec de connexion, nouvelle tentative dans 60 secondes...")
-               time.sleep(60)
-       except Exception as e:
-           logging.error(f"Erreur critique: {str(e)}")
-           time.sleep(60)
+    while True:
+        try:
+            bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+            if bot.connect():
+                bot.run_strategy()
+            else:
+                print("⏳ Nouvelle tentative dans 60 secondes...")
+                time.sleep(60)
+        except KeyboardInterrupt:
+            print("\n⛔ Arrêt du bot demandé par l'utilisateur")
+            break
+        except Exception as e:
+            print(f"❌ Erreur fatale: {str(e)}")
+            print("⏳ Redémarrage dans 60 secondes...")
+            time.sleep(60)
