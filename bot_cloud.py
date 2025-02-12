@@ -49,74 +49,36 @@ class XTBTradingBot:
        self.risk_percentage = 0.01
 
    def connect(self):
-    try:
-        logging.info(f"🔄 Tentative de connexion à XTB - UserID: {self.userId}")
-        self.client = Client()
-        self.client.connect()
-        response = self.client.login(self.userId, self.password)
-        
-        if response.get('status') == True:
-            self.streaming = Streaming(self.client)
-            logging.info("✅ Connecté à XTB avec succès")
-            return True
-        else:
-            logging.error(f"❌ Échec de connexion - Détails: {response}")
-            return False
-    except Exception as e:
-        logging.error(f"❌ Erreur de connexion: {str(e)}")
-        return False
-
-   def check_connection(self):
-    try:
-        if self.client is None:
-            return self.connect()
-        
-        # Ajout d'un timeout et gestion de la reconnexion
-        current_time = time.time()
-        if current_time - self.last_reconnect >= self.reconnect_interval:
-            logger.info("Renouvellement préventif de la connexion")
-            self.disconnect()
-            time.sleep(1)
-            success = self.connect()
-            if success:
-                self.last_reconnect = current_time
-            return success
-
-        response = self.client.commandExecute("ping")
-        if not response or not response.get('status'):
-            logger.warning("Ping échoué, tentative de reconnexion")
-            return self.connect()
+        try:
+            self.client = Client()
+            self.client.connect()
+            response = self.client.login(self.userId, self.password)
             
+            if response.get('status') == True:
+                self.streaming = Streaming(self.client)
+                print("✅ Connecté à XTB avec succès")
+                self.last_reconnect = time.time()
+                return True
+            else:
+                print(f"❌ Échec de connexion: {response.get('errorDescr', 'Erreur inconnue')}")
+                return False
+        except Exception as e:
+            print(f"❌ Erreur de connexion: {str(e)}")
+            return False
+
+    def check_connection(self):
+        """Vérifie et renouvelle la connexion si nécessaire"""
+        current_time = time.time()
+        if current_time - self.last_reconnect > self.reconnect_interval:
+            print("🔄 Renouvellement de la connexion...")
+            try:
+                self.client.disconnect()
+            except:
+                pass
+            return self.connect()
         return True
-    except Exception as e:
-        logger.error(f"Erreur de connexion: {str(e)}")
-        return self.connect()
 
-   def disconnect(self):
-    try:
-        if self.streaming:
-            self.streaming.disconnect()
-        if self.client:
-            self.client.disconnect()
-    except Exception as e:
-        logger.error(f"Erreur lors de la déconnexion: {str(e)}")
-    finally:
-        self.streaming = None
-        self.client = None
-        
-   def check_account_status(self):
-    try:
-        cmd = {"command": "getMarginLevel"}
-        response = self.client.commandExecute(cmd["command"])
-        if response and 'returnData' in response:
-            margin_data = response['returnData']
-            return margin_data
-        return None
-    except Exception as e:
-        logging.error(f"❌ Erreur lors de la vérification du compte: {str(e)}")
-        return None
-
-   def get_active_positions(self):
+    def get_active_positions(self):
         """Récupère toutes les positions actuellement ouvertes"""
         try:
             if not self.check_connection():
@@ -349,45 +311,7 @@ class XTBTradingBot:
                 print(f"❌ Erreur dans la boucle de trading: {str(e)}")
                 print("⏳ Attente de 30 secondes...")
                 time.sleep(30)
-
-from flask import Flask, jsonify
-import os, logging
-from bot_cloud import XTBTradingBot
-from threading import Thread
-import time
-
-logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
-bot = None
-trade_thread = None
-
-def run_trading():
-    while True:
-        try:
-            if bot and bot.client:
-                bot.run_strategy()
-            time.sleep(60)
-        except Exception as e:
-            logging.error(f"Error: {str(e)}")
-            time.sleep(30)
-
-def init_bot():
-    global bot, trade_thread
-    if not bot:
-        bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
-        bot.connect()
-        trade_thread = Thread(target=run_trading, daemon=True)
-        trade_thread.start()
-
-@app.route("/status", methods=['GET'])
-def status():
-    global bot
-    if not bot:
-        init_bot()
-    return jsonify({
-        "status": "connected" if bot and bot.client else "disconnected",
-        "account_info": bot.check_account_status() if bot else None
-    })
+                self.connect()
 
 if __name__ == "__main__":
     while True:
