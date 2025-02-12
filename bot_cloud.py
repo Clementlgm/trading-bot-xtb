@@ -92,6 +92,18 @@ class XTBTradingBot:
         logger.error(f"Erreur de connexion: {str(e)}")
         return self.connect()
 
+   def disconnect(self):
+    try:
+        if self.streaming:
+            self.streaming.disconnect()
+        if self.client:
+            self.client.disconnect()
+    except Exception as e:
+        logger.error(f"Erreur lors de la déconnexion: {str(e)}")
+    finally:
+        self.streaming = None
+        self.client = None
+    
    def check_connection(self):
         """Vérifie et renouvelle la connexion si nécessaire"""
         current_time = time.time()
