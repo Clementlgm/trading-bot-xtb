@@ -269,12 +269,12 @@ class XTBTradingBot:
             # Configuration des SL et TP
             if signal == "BUY":
                 entry_price = ask_price
-                sl_price = round(entry_price - 0.00100, 5)  # 10 pips en dessous
-                tp_price = round(entry_price + 0.00150, 5)  # 20 pips au-dessus
+                sl_price = round(entry_price - 0.00010, 5)  # 10 pips en dessous
+                tp_price = round(entry_price + 0.00010, 5)  # 20 pips au-dessus
             else:
                 entry_price = bid_price
-                sl_price = round(entry_price + 0.00100, 5)  # 10 pips au-dessus
-                tp_price = round(entry_price - 0.00150, 5)  # 20 pips en dessous
+                sl_price = round(entry_price + 0.00010, 5)  # 10 pips au-dessus
+                tp_price = round(entry_price - 0.00010, 5)  # 20 pips en dessous
 
             # Vérification des distances minimales
             min_distance = float(symbol_info.get('spreadRaw', 0)) * 2
