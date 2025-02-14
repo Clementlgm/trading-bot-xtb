@@ -117,36 +117,39 @@ class XTBTradingBot:
         return None
 
    def get_active_positions(self):
-        """Récupère toutes les positions actuellement ouvertes"""
-        try:
-            if not self.check_connection():
-                return False
+    """Récupère toutes les positions actuellement ouvertes"""
+    try:
+        if not self.check_connection():
+            return False
 
-            cmd = {
-                "command": "getTrades",
-                "arguments": {
-                    "openedOnly": True
-                }
+        cmd = {
+            "command": "getTrades",
+            "arguments": {
+                "openedOnly": True
             }
-            response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+        }
+        response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+        
+        if response and 'returnData' in response:
+            # Mise à jour de l'ensemble des positions actives
+            self.active_positions = {
+                str(trade['order']) 
+                for trade in response['returnData'] 
+                if trade.get('symbol') == self.symbol
+            }
             
-            if response and 'returnData' in response:
-                # Mise à jour de l'ensemble des positions actives
-                self.active_positions = {
-                    str(trade['order']) 
-                    for trade in response['returnData'] 
-                    if trade.get('symbol') == self.symbol
-                }
-                
-                if self.active_positions:
-                    print(f"📊 Positions actives trouvées: {len(self.active_positions)}")
-                return len(self.active_positions) > 0
+            # Important : on met à jour le statut de position_open
+            self.position_open = len(self.active_positions) > 0
             
-            return False
+            if self.active_positions:
+                print(f"📊 {len(self.active_positions)} position(s) active(s) trouvée(s)")
+            return self.position_open
+        
+        return False
             
-        except Exception as e:
-            print(f"❌ Erreur lors de la vérification des positions: {str(e)}")
-            return False
+    except Exception as e:
+        print(f"❌ Erreur lors de la vérification des positions: {str(e)}")
+        return False
 
    def get_historical_data(self, limit=100):
         try:
@@ -320,36 +323,45 @@ class XTBTradingBot:
             print(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
 
    def run_strategy(self):
-        print(f"\n🤖 Démarrage du bot de trading sur {self.symbol}")
-        
-        while True:
-            try:
-                # Vérification stricte des positions au début de chaque cycle
-                has_positions = self.get_active_positions()
-                
-                if has_positions:
-                    print(f"📊 En attente de clôture des positions actives...")
-                    time.sleep(30)  # Attente plus courte quand des positions sont ouvertes
-                    continue
-                
-                # Si aucune position n'est ouverte, recherche de nouvelles opportunités
-                df = self.get_historical_data()
-                if df is not None:
-                    df = self.calculate_indicators(df)
-                    if df is not None:
-                        signal = self.check_trading_signals(df)
-                        if signal:
-                            print(f"📊 Signal détecté: {signal}")
-                            self.execute_trade(signal)
-                
-                print("⏳ Attente de 1 minute...")
-                time.sleep(60)
-                
-            except Exception as e:
-                print(f"❌ Erreur dans la boucle de trading: {str(e)}")
-                print("⏳ Attente de 30 secondes...")
+    print(f"\n🤖 Démarrage du bot de trading sur {self.symbol}")
+    
+    while True:
+        try:
+            if not self.check_connection():
+                print("❌ Problème de connexion, tentative de reconnexion...")
                 time.sleep(30)
+                continue
 
+            # Vérification des positions actives
+            has_positions = self.get_active_positions()
+            
+            # Si nous avons des positions actives, on les surveille
+            if has_positions:
+                print(f"📊 Positions actives en cours - Surveillance...")
+                time.sleep(30)  # Vérification plus fréquente quand des positions sont ouvertes
+                continue
+            
+            # Si nous n'avons pas de position, cherchons de nouvelles opportunités
+            print("🔍 Recherche de nouvelles opportunités de trading...")
+            df = self.get_historical_data()
+            if df is not None:
+                df = self.calculate_indicators(df)
+                if df is not None:
+                    signal = self.check_trading_signals(df)
+                    if signal:
+                        print(f"📊 Signal détecté: {signal}")
+                        self.execute_trade(signal)
+                        # Après l'exécution, on attend un peu pour laisser le temps à l'ordre de se mettre en place
+                        time.sleep(10)
+                        continue
+            
+            print("⏳ Attente avant prochaine analyse...")
+            time.sleep(60)  # Intervalle entre les analyses quand pas de position
+                
+        except Exception as e:
+            print(f"❌ Erreur dans la boucle de trading: {str(e)}")
+            print("⏳ Attente de 30 secondes avant nouvelle tentative...")
+            time.sleep(30)
 from flask import Flask, jsonify
 import os, logging
 from bot_cloud import XTBTradingBot
