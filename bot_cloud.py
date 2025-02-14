@@ -1,7 +1,6 @@
 from xapi.client import Client
 from xapi.streaming import Streaming
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 import logging
@@ -117,7 +116,7 @@ class XTBTradingBot:
         logging.error(f"❌ Erreur lors de la vérification du compte: {str(e)}")
         return None
 
-    def get_active_positions(self):
+   def get_active_positions(self):
         """Récupère toutes les positions actuellement ouvertes"""
         try:
             if not self.check_connection():
@@ -149,7 +148,7 @@ class XTBTradingBot:
             print(f"❌ Erreur lors de la vérification des positions: {str(e)}")
             return False
 
-    def get_historical_data(self, limit=100):
+   def get_historical_data(self, limit=100):
         try:
             if not self.check_connection():
                 return None
@@ -180,7 +179,7 @@ class XTBTradingBot:
             print(f"❌ Erreur dans get_historical_data: {str(e)}")
             return None
 
-    def calculate_indicators(self, df):
+   def calculate_indicators(self, df):
         try:
             df['SMA20'] = df['close'].rolling(window=20).mean()
             df['SMA50'] = df['close'].rolling(window=50).mean()
@@ -197,7 +196,7 @@ class XTBTradingBot:
             print(f"❌ Erreur lors du calcul des indicateurs: {str(e)}")
             return None
 
-    def check_trading_signals(self, df):
+   def check_trading_signals(self, df):
         if len(df) < 50:
             print("⚠️ Pas assez de données pour générer des signaux")
             return None
@@ -224,7 +223,7 @@ class XTBTradingBot:
         else:
             return None
 
-    def get_symbol_info(self):
+   def get_symbol_info(self):
         try:
             cmd = {
                 "command": "getSymbol",
@@ -238,7 +237,7 @@ class XTBTradingBot:
             print(f"❌ Erreur lors de la récupération des infos du symbole: {str(e)}")
             return {}
 
-    def execute_trade(self, signal):
+   def execute_trade(self, signal):
         try:
             # Vérification stricte des positions ouvertes
             if self.get_active_positions():
@@ -320,7 +319,7 @@ class XTBTradingBot:
         except Exception as e:
             print(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
 
-    def run_strategy(self):
+   def run_strategy(self):
         print(f"\n🤖 Démarrage du bot de trading sur {self.symbol}")
         
         while True:
@@ -350,21 +349,60 @@ class XTBTradingBot:
                 print(f"❌ Erreur dans la boucle de trading: {str(e)}")
                 print("⏳ Attente de 30 secondes...")
                 time.sleep(30)
-                self.connect()
 
-if __name__ == "__main__":
+from flask import Flask, jsonify
+import os, logging
+from bot_cloud import XTBTradingBot
+from threading import Thread
+import time
+
+logging.basicConfig(level=logging.INFO)
+app = Flask(__name__)
+bot = None
+trade_thread = None
+
+def run_trading():
     while True:
         try:
-            bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
-            if bot.connect():
+            if bot and bot.client:
                 bot.run_strategy()
-            else:
-                print("⏳ Nouvelle tentative dans 60 secondes...")
-                time.sleep(60)
-        except KeyboardInterrupt:
-            print("\n⛔ Arrêt du bot demandé par l'utilisateur")
-            break
-        except Exception as e:
-            print(f"❌ Erreur fatale: {str(e)}")
-            print("⏳ Redémarrage dans 60 secondes...")
             time.sleep(60)
+        except Exception as e:
+            logging.error(f"Error: {str(e)}")
+            time.sleep(30)
+
+def init_bot():
+    global bot, trade_thread
+    if not bot:
+        bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+        bot.connect()
+        trade_thread = Thread(target=run_trading, daemon=True)
+        trade_thread.start()
+
+@app.route("/status", methods=['GET'])
+def status():
+    global bot
+    if not bot:
+        init_bot()
+    return jsonify({
+        "status": "connected" if bot and bot.client else "disconnected",
+        "account_info": bot.check_account_status() if bot else None
+    })
+
+if __name__ == "__main__":
+    init_bot()
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))                
+
+if __name__ == "__main__":
+   while True:
+       try:
+           bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+           if bot.connect():
+               bot.run_strategy()
+           else:
+               logging.error("Échec de connexion, nouvelle tentative dans 60 secondes...")
+               time.sleep(60)
+       except Exception as e:
+           logging.error(f"Erreur critique: {str(e)}")
+           time.sleep(60)
+
