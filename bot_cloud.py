@@ -319,6 +319,25 @@ class XTBTradingBot:
         except Exception as e:
             print(f"❌ Erreur lors de l'exécution de l'ordre: {str(e)}")
 
+    def check_trade_status(self):
+    try:
+        cmd = {
+            "command": "getTrades",
+            "arguments": {
+                "openedOnly": True
+            }
+        }
+        response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+    
+        if response and 'returnData' in response:
+            trades = response['returnData']
+            return len(trades) > 0
+        return False
+    
+    except Exception as e:
+        logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
+        return False
+        
    def run_strategy(self):
         print(f"\n🤖 Démarrage du bot de trading sur {self.symbol}")
         
