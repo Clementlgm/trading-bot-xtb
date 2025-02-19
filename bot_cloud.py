@@ -355,7 +355,7 @@ class XTBTradingBot:
 if __name__ == "__main__":
     while True:
         try:
-            bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
+            bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
             if bot.connect():
                 bot.run_strategy()
             else:
