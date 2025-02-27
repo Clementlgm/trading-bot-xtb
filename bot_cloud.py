@@ -266,6 +266,9 @@ class XTBTradingBot:
            return {}
 
    def execute_trade(self, signal):
+    if self.check_trade_status():
+        logger.info("Position déjà ouverte. Pas de nouveau trade.")
+        return False
     if not self.check_connection():
         logger.error("Pas de connexion")
         return False
@@ -348,18 +351,21 @@ class XTBTradingBot:
    def run_strategy(self):
     try:
         if not self.check_connection():
+            logger.error("Pas de connexion à XTB")
             return False
-                
-        if self.check_trade_status():
-            logger.info("Position ouverte, attente...")
-            return True
-                
+        
+        # Vérification stricte des positions au début de chaque cycle
+        has_positions = self.check_trade_status()
+        
+        if has_positions:
+            logger.info("📊 En attente de clôture des positions actives...")
+            return True  # Indique que tout va bien, mais on attend
+        
+        # Si aucune position n'est ouverte, recherche de nouvelles opportunités
         df = self.get_historical_data()
         if df is not None:
             df = self.calculate_indicators(df)
             if df is not None:
-                signal = self.check_trading_signals(df)
-                
                 # Loggez toutes les valeurs importantes
                 last_row = df.iloc[-1]
                 logger.info(f"""
@@ -368,17 +374,24 @@ class XTBTradingBot:
                 - SMA20: {last_row['SMA20']}
                 - SMA50: {last_row['SMA50']}
                 - RSI: {last_row['RSI']}
-                - Signal détecté: {signal}
                 """)
+                
+                signal = self.check_trading_signals(df)
                 
                 if signal:
                     logger.info(f"🎯 Signal détecté: {signal}")
+                    
+                    # Double vérification des positions
+                    if self.check_trade_status():
+                        logger.info("Position détectée après vérification, pas de nouveau trade")
+                        return True
+                    
+                    # Exécution du trade
                     result = self.execute_trade(signal)
                     logger.info(f"Résultat de l'ordre automatique: {result}")
                     return result
-                    
+        
         return True
-            
     except Exception as e:
         logger.error(f"Erreur critique dans run_strategy: {str(e)}")
         return False
