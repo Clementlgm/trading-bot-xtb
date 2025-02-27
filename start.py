@@ -301,6 +301,23 @@ def force_trade():
             "error": str(e)
         }), 500
 
+@app.route("/sync_status", methods=['GET'])
+def sync_status():
+    global bot
+    if not bot:
+        init_bot_if_needed()
+        
+    try:
+        has_positions = bot.check_trade_status()
+        return jsonify({
+            "success": True,
+            "position_open": has_positions,
+            "message": "État synchronisé",
+            "previous_state": bot.position_open
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     try:
         if init_bot_if_needed():
