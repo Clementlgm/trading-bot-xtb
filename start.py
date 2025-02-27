@@ -270,6 +270,37 @@ def debug_bot():
             "message": str(e)
         }), 500
 
+@app.route("/force_trade", methods=['GET'])
+def force_trade():
+    global bot
+    if not bot:
+        init_bot_if_needed()
+        
+    try:
+        logger.info("🔥 FORÇAGE D'ORDRE MANUEL VIA /force_trade")
+        # Vérification explicite de la connexion
+        if not bot.check_connection():
+            return jsonify({"error": "Bot non connecté"}), 500
+            
+        # Vérifie s'il y a des positions ouvertes
+        if bot.check_trade_status():
+            return jsonify({"error": "Position déjà ouverte"}), 400
+            
+        # Force un ordre d'achat
+        result = bot.execute_trade("BUY")
+        logger.info(f"Résultat de l'ordre forcé via API: {result}")
+        
+        return jsonify({
+            "success": result,
+            "message": "Ordre forcé exécuté"
+        })
+    except Exception as e:
+        logger.error(f"Exception lors du forçage d'ordre: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 if __name__ == "__main__":
     try:
         if init_bot_if_needed():
