@@ -265,15 +265,17 @@ def debug_bot():
         }), 500
 
 if __name__ == "__main__":
-    # Démarre le thread de trading
     try:
         if init_bot_if_needed():
+            logger.info("Bot initialisé avec succès, démarrage du thread de trading...")
             trading_thread = Thread(target=run_trading_thread, daemon=True)
             trading_thread.start()
-            logger.info("Thread de trading démarré")
+            logger.info("Thread de trading démarré avec succès")
+        else:
+            logger.error("Échec de l'initialisation du bot")
     except Exception as e:
-        logger.error(f"Erreur au démarrage: {str(e)}")
-
+        logger.error(f"Erreur lors du démarrage: {str(e)}")
+        
     # Démarre le serveur Flask
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
