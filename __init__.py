@@ -1,4 +1,4 @@
-def __init__(self, symbol='EURUSD', timeframe='1h'):
+def __init__(self, symbol='EURUSD', timeframe='1m'):
         load_dotenv()
         self.userId = os.getenv('XTB_USER_ID') 
         self.password = os.getenv('XTB_PASSWORD') 
