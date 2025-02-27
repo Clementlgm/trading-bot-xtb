@@ -275,6 +275,13 @@ class XTBTradingBot:
         ask_price = float(symbol_info.get('ask', 0))
         bid_price = float(symbol_info.get('bid', 0))
         lot_min = max(float(symbol_info.get('lotMin', 0.01)), 0.01)
+        
+        logger.info(f"Prix demandé: {ask_price}, Prix offert: {bid_price}, Volume min: {lot_min}")
+
+        # Vérification des valeurs
+        if ask_price <= 0 or bid_price <= 0 or lot_min <= 0:
+            logger.error(f"Valeurs invalides pour le trade: ask={ask_price}, bid={bid_price}, lot_min={lot_min}")
+            return False
 
         trade_cmd = {
             "command": "tradeTransaction",
@@ -297,17 +304,21 @@ class XTBTradingBot:
 
         logger.info(f"Envoi ordre: {json.dumps(trade_cmd, indent=2)}")
         response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
-        logger.info(f"Réponse trade: {json.dumps(response, indent=2)}")
+        logger.info(f"Réponse trade complète: {json.dumps(response, indent=2)}")
         
         if response and response.get('status'):
+            order_id = response.get('returnData', {}).get('order')
+            logger.info(f"Trade exécuté avec succès, order_id: {order_id}")
             self.position_open = True
-            self.current_order_id = response.get('returnData', {}).get('order')
+            self.current_order_id = order_id
             return True
             
+        error_msg = response.get('errorDescr', 'Erreur inconnue') if response else 'Pas de réponse'
+        logger.error(f"Échec du trade: {error_msg}")
         return False
         
     except Exception as e:
-        logger.error(f"Erreur execution trade: {str(e)}")
+        logger.error(f"Exception lors de l'exécution du trade: {str(e)}")
         return False
 
    def check_trade_status(self):
