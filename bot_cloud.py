@@ -319,7 +319,20 @@ class XTBTradingBot:
         error_msg = response.get('errorDescr', 'Erreur inconnue') if response else 'Pas de réponse'
         logger.error(f"Échec du trade: {error_msg}")
         return False
-        
+
+        if response and response.get('status'):
+            order_id = response.get('returnData', {}).get('order')
+            logger.info(f"Trade exécuté avec succès, order_id: {order_id}")
+    
+            # Vérification immédiate pour confirmer l'état
+            time.sleep(1)  # Attente courte pour que l'ordre soit traité
+            has_positions = self.check_trade_status()
+            logger.info(f"Vérification après trade: position_open={has_positions}")
+    
+            self.position_open = True
+            self.current_order_id = order_id
+            return True
+       
     except Exception as e:
         logger.error(f"Exception lors de l'exécution du trade: {str(e)}")
         return False
