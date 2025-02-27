@@ -328,7 +328,7 @@ class XTBTradingBot:
         logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
         return False
 
-   def run_trading(self):
+   def run_strategy(self):
     try:
         if not self.check_connection():
             return False
