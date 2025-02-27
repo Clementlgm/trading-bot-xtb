@@ -359,9 +359,23 @@ class XTBTradingBot:
             df = self.calculate_indicators(df)
             if df is not None:
                 signal = self.check_trading_signals(df)
+                
+                # Loggez toutes les valeurs importantes
+                last_row = df.iloc[-1]
+                logger.info(f"""
+                Analyse pour décision de trading:
+                - Prix actuel: {last_row['close']}
+                - SMA20: {last_row['SMA20']}
+                - SMA50: {last_row['SMA50']}
+                - RSI: {last_row['RSI']}
+                - Signal détecté: {signal}
+                """)
+                
                 if signal:
                     logger.info(f"🎯 Signal détecté: {signal}")
-                    self.execute_trade(signal)
+                    result = self.execute_trade(signal)
+                    logger.info(f"Résultat de l'ordre automatique: {result}")
+                    return result
                     
         return True
             
