@@ -268,7 +268,7 @@ if __name__ == "__main__":
     # Démarre le thread de trading
     try:
         if init_bot_if_needed():
-            trading_thread = Thread(target=run_trading, daemon=True)
+            trading_thread = Thread(target=run_trading_thread, daemon=True)
             trading_thread.start()
             logger.info("Thread de trading démarré")
     except Exception as e:
