@@ -81,21 +81,27 @@ def init_bot_if_needed():
 
 def run_trading_thread():
     logger.info("Démarrage du thread de trading")
+    first_run = True
     while True:
         try:
             with bot_lock:
                 if bot and bot.check_connection():
-                    success = bot.run_strategy()
-                    if not success:
-                        logger.warning("Échec de l'exécution de la stratégie")
+                    # Force un ordre uniquement au premier passage pour tester
+                    if first_run:
+                        logger.info("⚠️ ORDRE DE TEST FORCÉ")
+                        bot.execute_trade("BUY")
+                        first_run = False
+                    else:
+                        success = bot.run_strategy()
+                        if not success:
+                            logger.warning("Échec de l'exécution de la stratégie")
                 else:
                     if init_bot_if_needed():
                         logger.info("Bot réinitialisé avec succès")
                     else:
                         logger.error("Échec de la réinitialisation")
                         time.sleep(30)
-            # Attente avant la prochaine itération
-            time.sleep(60)  # Vérifie toutes les minutes
+            time.sleep(60)
         except Exception as e:
             logger.error(f"Erreur dans le thread de trading: {str(e)}")
             time.sleep(10)
