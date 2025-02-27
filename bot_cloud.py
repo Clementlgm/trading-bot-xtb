@@ -424,9 +424,3 @@ class XTBTradingBot:
     except Exception as e:
         logger.error(f"Erreur critique dans run_strategy: {str(e)}")
         return False
-    
-    def load_bot_state():
-        # Récupérer l'état depuis Firestore ou autre stockage persistant
-    
-    def save_bot_state():
-        # Sauvegarder l'état dans Firestore ou autre stockage persistant
