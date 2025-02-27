@@ -41,6 +41,7 @@ class XTBTradingBot:
        self.timeframe = timeframe
        self.client = None
        self.streaming = None
+       self.active_positions = set()
        self.position_open = False
        self.current_order_id = None
        self.last_reconnect = time.time()
