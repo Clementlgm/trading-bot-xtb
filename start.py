@@ -131,7 +131,7 @@ import logging
 def test_trade():
     global bot
     if not bot:
-        init_bot()
+        init_bot_if_needed()
         
     try:
         account_info = bot.check_account_status()
