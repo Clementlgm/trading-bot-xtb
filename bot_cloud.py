@@ -347,7 +347,18 @@ class XTBTradingBot:
         logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
         self.position_open = False
         return False
-        
+
+   def execute_trade_simulation(self, signal):
+    """Version simulation de execute_trade qui ne passe pas d'ordre réel"""
+    logger.info(f"SIMULATION: Exécution d'un ordre {signal}")
+    self.position_open = True
+    self.current_order_id = f"sim_{int(time.time())}"
+    return True
+    
+   def check_trade_status_simulation(self):
+    """Version simulation de check_trade_status"""
+    return self.position_open 
+    
    def run_strategy(self):
     try:
         if not self.check_connection():
@@ -380,6 +391,11 @@ class XTBTradingBot:
                 
                 if signal:
                     logger.info(f"🎯 Signal détecté: {signal}")
+            
+                    # SIMULATION: Utiliser la version simulation pour tester
+                    result = self.execute_trade_simulation(signal)
+                    logger.info(f"Résultat de l'ordre SIMULÉ: {result}")
+                    return result
                     
                     # Double vérification des positions
                     if self.check_trade_status():
