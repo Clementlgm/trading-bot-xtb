@@ -322,13 +322,18 @@ class XTBTradingBot:
     
         if response and 'returnData' in response:
             trades = response['returnData']
-            return len(trades) > 0
+            has_positions = len(trades) > 0
+            # Très important: mettre à jour l'état interne
+            self.position_open = has_positions
+            return has_positions
+        self.position_open = False
         return False
     
     except Exception as e:
         logging.error(f"❌ Erreur lors de la vérification du trade: {str(e)}")
+        self.position_open = False
         return False
-
+        
    def run_strategy(self):
     try:
         if not self.check_connection():
@@ -352,60 +357,3 @@ class XTBTradingBot:
     except Exception as e:
         logger.error(f"Erreur critique dans run_strategy: {str(e)}")
         return False
-
-from flask import Flask, jsonify
-import os, logging
-from bot_cloud import XTBTradingBot
-from threading import Thread
-import time
-
-logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
-bot = None
-trade_thread = None
-
-def run_trading():
-    while True:
-        try:
-            if bot and bot.client:
-                bot.run_strategy()
-            time.sleep(60)
-        except Exception as e:
-            logging.error(f"Error: {str(e)}")
-            time.sleep(30)
-
-def init_bot():
-    global bot, trade_thread
-    if not bot:
-        bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
-        bot.connect()
-        trade_thread = Thread(target=run_trading, daemon=True)
-        trade_thread.start()
-
-@app.route("/status", methods=['GET'])
-def status():
-    global bot
-    if not bot:
-        init_bot()
-    return jsonify({
-        "status": "connected" if bot and bot.client else "disconnected",
-        "account_info": bot.check_account_status() if bot else None
-    })
-
-if __name__ == "__main__":
-    while True:
-        try:
-            bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
-            if bot.connect():
-                bot.run_strategy()
-            else:
-                print("⏳ Nouvelle tentative dans 60 secondes...")
-                time.sleep(60)
-        except KeyboardInterrupt:
-            print("\n⛔ Arrêt du bot demandé par l'utilisateur")
-            break
-        except Exception as e:
-            print(f"❌ Erreur fatale: {str(e)}")
-            print("⏳ Redémarrage dans 60 secondes...")
-            time.sleep(60)
-
