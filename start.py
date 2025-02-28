@@ -319,4 +319,50 @@ def toggle_force_execution():
         init_bot_if_needed()
         
     try:
-        #
+        bot.force_execution = not bot.force_execution
+        logger.info(f"Force execution toggled to: {bot.force_execution}")
+        
+        return jsonify({
+            "success": True,
+            "force_execution": bot.force_execution,
+            "message": f"Mode d'exécution forcée {'activé' if bot.force_execution else 'désactivé'}"
+        })
+    except Exception as e:
+        logger.error(f"Exception lors du changement de mode: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route("/sync_status", methods=['GET'])
+def sync_status():
+    global bot
+    if not bot:
+        init_bot_if_needed()
+        
+    try:
+        has_positions = bot.check_trade_status()
+        return jsonify({
+            "success": True,
+            "position_open": has_positions,
+            "message": "État synchronisé",
+            "previous_state": bot.position_open
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    try:
+        if init_bot_if_needed():
+            logger.info("Bot initialisé avec succès, démarrage du thread de trading...")
+            trading_thread = Thread(target=run_trading_thread, daemon=True)
+            trading_thread.start()
+            logger.info("Thread de trading démarré avec succès")
+        else:
+            logger.error("Échec de l'initialisation du bot")
+    except Exception as e:
+        logger.error(f"Erreur lors du démarrage: {str(e)}")
+        
+    # Démarre le serveur Flask
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, debug=False)
