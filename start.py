@@ -419,6 +419,178 @@ def force_buy_now():
             "error": str(e)
         }), 500
 
+@app.route("/debug_advanced", methods=['GET'])
+def debug_advanced():
+    """
+    Endpoint de débogage avancé pour identifier précisément pourquoi le bot ne prend pas de position
+    """
+    global bot
+    if not bot:
+        return jsonify({"error": "Bot non initialisé"}), 500
+        
+    try:
+        # 1. Vérification de la connexion
+        if not bot.check_connection():
+            return jsonify({"error": "Bot non connecté à XTB"}), 500
+            
+        # 2. Vérification des positions ouvertes
+        has_positions = False
+        try:
+            cmd = {
+                "command": "getTrades",
+                "arguments": {
+                    "openedOnly": True
+                }
+            }
+            response = bot.client.commandExecute(cmd["command"], cmd["arguments"])
+            logger.info(f"Positions ouvertes: {json.dumps(response, indent=2)}")
+            
+            if response and 'returnData' in response:
+                positions = response['returnData']
+                has_positions = len(positions) > 0
+                positions_details = positions
+            else:
+                positions_details = "Pas de données sur les positions"
+        except Exception as e:
+            positions_details = f"Erreur de vérification des positions: {str(e)}"
+            
+        # 3. Récupération des données historiques
+        df = None
+        df_error = None
+        try:
+            df = bot.get_historical_data()
+            if df is None:
+                df_error = "Aucune donnée historique reçue"
+        except Exception as e:
+            df_error = f"Erreur lors de la récupération des données: {str(e)}"
+            
+        # 4. Calcul des indicateurs
+        indicators = None
+        indicators_error = None
+        if df is not None:
+            try:
+                df_with_indicators = bot.calculate_indicators(df)
+                if df_with_indicators is not None:
+                    last_row = df_with_indicators.iloc[-1]
+                    indicators = {
+                        "SMA20": float(last_row['SMA20']),
+                        "SMA50": float(last_row['SMA50']),
+                        "RSI": float(last_row['RSI']),
+                        "close": float(last_row['close']),
+                        "SMA_condition": last_row['SMA20'] > last_row['SMA50'],
+                        "RSI_condition": last_row['RSI'] < 70,
+                        "price_condition": last_row['close'] > last_row['SMA20']
+                    }
+                else:
+                    indicators_error = "Erreur lors du calcul des indicateurs"
+            except Exception as e:
+                indicators_error = f"Exception lors du calcul des indicateurs: {str(e)}"
+                
+        # 5. Tester la fonction check_trading_signals
+        signal = None
+        signal_error = None
+        if df is not None and indicators is not None:
+            try:
+                signal = bot.check_trading_signals(df_with_indicators)
+            except Exception as e:
+                signal_error = f"Exception lors de la vérification des signaux: {str(e)}"
+                
+        # 6. Tester l'exécution manuelle d'un ordre
+        trade_test = None
+        try:
+            # Simule uniquement l'exécution sans l'envoyer réellement
+            symbol_info = bot.get_symbol_info()
+            ask_price = float(symbol_info.get('ask', 0))
+            bid_price = float(symbol_info.get('bid', 0))
+            lot_min = max(float(symbol_info.get('lotMin', 0.01)), 0.01)
+            
+            trade_cmd = {
+                "command": "tradeTransaction",
+                "arguments": {
+                    "tradeTransInfo": {
+                        "cmd": 0,  # BUY
+                        "customComment": "Test Only - Not Executed",
+                        "expiration": 0,
+                        "offset": 0,
+                        "order": 0,
+                        "price": ask_price,
+                        "sl": round(ask_price * 0.985, 5),
+                        "tp": round(ask_price * 1.02, 5),
+                        "symbol": bot.symbol,
+                        "type": 0,
+                        "volume": lot_min
+                    }
+                }
+            }
+            
+            trade_test = {
+                "command": trade_cmd,
+                "would_execute": bot.force_execution,
+                "current_positions": has_positions,
+                "ask_price": ask_price,
+                "bid_price": bid_price,
+                "lot_min": lot_min
+            }
+        except Exception as e:
+            trade_test = f"Erreur lors de la simulation d'ordre: {str(e)}"
+            
+        # 7. Vérifier l'état du compte
+        account_status = None
+        try:
+            account_status = bot.check_account_status()
+        except Exception as e:
+            account_status = f"Erreur lors de la vérification du compte: {str(e)}"
+            
+        # 8. Examiner les logs récents
+        logs = []
+        try:
+            with open('trading.log', 'r') as log_file:
+                logs = log_file.readlines()[-50:]  # Dernières 50 lignes
+        except Exception as e:
+            logs = [f"Erreur lors de la lecture des logs: {str(e)}"]
+            
+        return jsonify({
+            "status": "success",
+            "timestamp": time.time(),
+            "bot_state": {
+                "connection": bot.check_connection(),
+                "symbol": bot.symbol,
+                "timeframe": bot.timeframe,
+                "position_open": bot.position_open,
+                "force_execution": bot.force_execution,
+                "last_reconnect": bot.last_reconnect,
+                "current_time": time.time(),
+                "time_since_reconnect": time.time() - bot.last_reconnect
+            },
+            "positions": {
+                "has_positions": has_positions,
+                "details": positions_details
+            },
+            "historical_data": {
+                "received": df is not None,
+                "error": df_error,
+                "rows": len(df) if df is not None else 0
+            },
+            "indicators": {
+                "calculated": indicators is not None,
+                "error": indicators_error,
+                "values": indicators
+            },
+            "trading_signal": {
+                "signal": signal,
+                "error": signal_error
+            },
+            "simulated_trade": trade_test,
+            "account_status": account_status,
+            "recent_logs": logs
+        })
+    except Exception as e:
+        logger.error(f"Erreur dans debug_advanced: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
 if __name__ == "__main__":
     try:
         if init_bot_if_needed():
