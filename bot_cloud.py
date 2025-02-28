@@ -207,11 +207,10 @@ class XTBTradingBot:
 
    def check_trading_signals(self, df):
     if len(df) < 50:
-        logger.info("⚠️ Pas assez de données pour générer un signal (minimum 50 périodes)")
+        logger.info("⚠️ Pas assez de données")
         return None
             
     last_row = df.iloc[-1]
-    previous_row = df.iloc[-2] if len(df) > 1 else last_row
     
     # Conditions pour l'achat
     buy_sma_condition = last_row['SMA20'] > last_row['SMA50']
@@ -226,41 +225,27 @@ class XTBTradingBot:
     buy_signal = buy_sma_condition and buy_price_condition and buy_rsi_condition
     sell_signal = sell_sma_condition and sell_price_condition and sell_rsi_condition
     
-    # Ajout de détection de tendance
-    sma20_trend = "HAUSSE" if last_row['SMA20'] > previous_row['SMA20'] else "BAISSE"
-    sma50_trend = "HAUSSE" if last_row['SMA50'] > previous_row['SMA50'] else "BAISSE"
-    
     signal_type = None
     if buy_signal:
         signal_type = "BUY"
+        conditions = {
+            "sma_condition": str(buy_sma_condition),
+            "price_condition": str(buy_price_condition),
+            "rsi_condition": str(buy_rsi_condition)
+        }
     elif sell_signal:
         signal_type = "SELL"
+        conditions = {
+            "sma_condition": str(sell_sma_condition),
+            "price_condition": str(sell_price_condition),
+            "rsi_condition": str(sell_rsi_condition)
+        }
     
-    # Logging détaillé pour l'analyse des signaux
     logger.info(f"""
-    =================================
-    ANALYSE DE SIGNAL DE TRADING:
-    ---------------------------------
-    CONDITIONS ACTUELLES:
-    - Prix: {last_row['close']:.5f}
-    - SMA20: {last_row['SMA20']:.5f} (Tendance: {sma20_trend})
-    - SMA50: {last_row['SMA50']:.5f} (Tendance: {sma50_trend})
-    - RSI: {last_row['RSI']:.2f}
-    
-    ANALYSE SIGNAL ACHAT:
-    - Condition SMA (SMA20 > SMA50): {buy_sma_condition} ({last_row['SMA20']:.5f} {'>' if buy_sma_condition else '<='} {last_row['SMA50']:.5f})
-    - Condition Prix (Prix > SMA20): {buy_price_condition} ({last_row['close']:.5f} {'>' if buy_price_condition else '<='} {last_row['SMA20']:.5f})
-    - Condition RSI (RSI < 70): {buy_rsi_condition} ({last_row['RSI']:.2f} {'<' if buy_rsi_condition else '>='} 70)
-    - Signal ACHAT généré: {buy_signal}
-    
-    ANALYSE SIGNAL VENTE:
-    - Condition SMA (SMA20 < SMA50): {sell_sma_condition} ({last_row['SMA20']:.5f} {'<' if sell_sma_condition else '>='} {last_row['SMA50']:.5f})
-    - Condition Prix (Prix < SMA20): {sell_price_condition} ({last_row['close']:.5f} {'<' if sell_price_condition else '>='} {last_row['SMA20']:.5f})
-    - Condition RSI (RSI > 30): {sell_rsi_condition} ({last_row['RSI']:.2f} {'>' if sell_rsi_condition else '<='} 30)
-    - Signal VENTE généré: {sell_signal}
-    
-    DÉCISION: {signal_type if signal_type else "AUCUN SIGNAL"}
-    =================================
+    Conditions actuelles pour {signal_type if signal_type else 'aucun signal'}:
+    - SMA20: {last_row['SMA20']} {'>' if signal_type == 'BUY' else '<'} SMA50: {last_row['SMA50']}
+    - Prix: {last_row['close']} {'>' if signal_type == 'BUY' else '<'} SMA20: {last_row['SMA20']}
+    - RSI: {last_row['RSI']} {'<' if signal_type == 'BUY' else '>'} {70 if signal_type == 'BUY' else 30}
     """)
     
     return signal_type
@@ -378,69 +363,48 @@ class XTBTradingBot:
     
    def run_strategy(self):
     try:
-        logger.info("=== Exécution de la stratégie de trading ===")
-        
         if not self.check_connection():
             logger.error("Pas de connexion à XTB")
             return False
         
-        # Vérification du statut des positions au début de chaque cycle
+        # Vérification stricte des positions au début de chaque cycle
         has_positions = self.check_trade_status()
-        logger.info(f"Statut actuel des positions: {has_positions}")
         
         if has_positions:
-            logger.info("Position déjà ouverte. En attente de clôture.")
-            return True
+            logger.info("📊 En attente de clôture des positions actives...")
+            return True  # Indique que tout va bien, mais on attend
         
-        # Si aucune position n'est ouverte, recherche d'opportunités
-        logger.info("Récupération des données historiques...")
+        # Si aucune position n'est ouverte, recherche de nouvelles opportunités
         df = self.get_historical_data()
+        if df is not None:
+            df = self.calculate_indicators(df)
+            if df is not None:
+                # Loggez toutes les valeurs importantes
+                last_row = df.iloc[-1]
+                logger.info(f"""
+                Analyse pour décision de trading:
+                - Prix actuel: {last_row['close']}
+                - SMA20: {last_row['SMA20']}
+                - SMA50: {last_row['SMA50']}
+                - RSI: {last_row['RSI']}
+                """)
+                
+                signal = self.check_trading_signals(df)
+                
+                if signal:
+                    logger.info(f"🎯 Signal détecté: {signal}")
+                    
+                    # Double vérification des positions
+                    if self.check_trade_status():
+                        logger.info("Position détectée après vérification, pas de nouveau trade")
+                        return True
+                    
+                    # Exécution du trade
+                    result = self.execute_trade(signal)
+                    logger.info(f"Résultat de l'ordre automatique: {result}")
+                    return result
         
-        if df is None:
-            logger.error("Échec de récupération des données historiques")
-            return False
-            
-        if len(df) < 50:
-            logger.warning(f"Données insuffisantes pour l'analyse: {len(df)} périodes (minimum 50 requis)")
-            return True
-        
-        logger.info("Calcul des indicateurs techniques...")
-        df = self.calculate_indicators(df)
-        
-        if df is None:
-            logger.error("Échec du calcul des indicateurs")
-            return False
-        
-        # Vérification des signaux de trading
-        logger.info("Recherche de signaux de trading...")
-        signal = self.check_trading_signals(df)
-        
-        if signal:
-            logger.info(f"📈 Signal détecté: {signal}")
-            
-            # Double vérification du statut des positions avant exécution
-            if self.check_trade_status():
-                logger.warning("Position détectée lors de la vérification finale, abandon du nouveau trade")
-                return True
-            
-            # Exécution du trade
-            logger.info(f"Exécution du trade {signal}...")
-            result = self.execute_trade(signal)
-            logger.info(f"Résultat de l'exécution du trade: {'Succès' if result else 'Échec'}")
-            
-            # Vérification que le trade a été exécuté
-            time.sleep(1)
-            actual_status = self.check_trade_status()
-            logger.info(f"Statut des positions après trade: {actual_status}")
-            
-            if result and not actual_status:
-                logger.warning("L'exécution du trade a signalé un succès mais aucune position n'est détectée")
-            
-            return result
-        else:
-            logger.info("Aucun signal de trading détecté")
-            return True
-            
+        return True
     except Exception as e:
         logger.error(f"Erreur critique dans run_strategy: {str(e)}")
         return False
