@@ -7,6 +7,8 @@ from bot_cloud import XTBTradingBot
 from threading import Thread, Lock
 import google.cloud.logging
 from functools import wraps
+from bot_cloud_fix_2 import apply_enhanced_strategy
+
 
 # Configuration du logging
 client = google.cloud.logging.Client()
@@ -73,6 +75,8 @@ def init_bot_if_needed():
                 return False
             
             bot_status["is_running"] = True
+            apply_enhanced_strategy(bot)
+            logger.info("Stratégie améliorée appliquée")
             return True
         return True
     except Exception as e:
