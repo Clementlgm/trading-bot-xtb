@@ -70,35 +70,27 @@ class XTBTradingBot:
    def check_connection(self):
     try:
         if self.client is None:
-            logger.info("Client est None, connexion en cours...")
             return self.connect()
         
-        # Reconnexion plus agressive
+        # Ajout d'un timeout et gestion de la reconnexion
         current_time = time.time()
-        if current_time - self.last_reconnect >= 30:  # Réduit de 60 à 30 secondes
-            logger.info("Reconnexion préventive en cours")
+        if current_time - self.last_reconnect >= self.reconnect_interval:
+            logger.info("Renouvellement préventif de la connexion")
             self.disconnect()
-            time.sleep(2)  # Augmenté de 1 à 2 secondes
+            time.sleep(1)
             success = self.connect()
             if success:
                 self.last_reconnect = current_time
             return success
 
-        try:
-            # Ajout d'un timeout à la commande ping
-            response = self.client.commandExecute("ping")
-            if not response or not response.get('status'):
-                logger.warning("Échec du ping, reconnexion...")
-                self.disconnect()
-                time.sleep(2)
-                return self.connect()
-        except Exception as e:
-            logger.error(f"Erreur pendant le ping: {str(e)}")
+        response = self.client.commandExecute("ping")
+        if not response or not response.get('status'):
+            logger.warning("Ping échoué, tentative de reconnexion")
             return self.connect()
             
         return True
     except Exception as e:
-        logger.error(f"Erreur de vérification de connexion: {str(e)}")
+        logger.error(f"Erreur de connexion: {str(e)}")
         return self.connect()
 
    def disconnect(self):
