@@ -7,6 +7,8 @@ from bot_cloud import XTBTradingBot
 from threading import Thread, Lock
 import google.cloud.logging
 from functools import wraps
+from apscheduler.schedulers.background import BackgroundScheduler
+import datetime
 
 # Configuration du logging
 client = google.cloud.logging.Client()
@@ -26,6 +28,17 @@ bot_status = {
     "last_request_time": 0,
     "request_count": 0
 }
+
+def sync_position_status():
+    """Synchronise l'état interne du bot avec l'état réel du compte"""
+    global bot
+    with bot_lock:
+        if bot and bot.check_connection():
+            logger.info("Exécution de la synchronisation programmée du statut des positions...")
+            actual_status = bot.check_trade_status()
+            if actual_status != bot.position_open:
+                logger.warning(f"Incohérence de statut de position détectée et corrigée. Réel: {actual_status}, Interne au bot: {bot.position_open}")
+                bot.position_open = actual_status
 
 # Configuration des limites de taux
 RATE_LIMIT = 30  # requêtes par minute
@@ -332,4 +345,9 @@ if __name__ == "__main__":
         
     # Démarre le serveur Flask
     port = int(os.environ.get("PORT", 8080))
+    # Démarrer le planificateur pour synchroniser régulièrement l'état des positions
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(sync_position_status, 'interval', minutes=5)
+    scheduler.start()
+    logger.info("Planificateur de synchronisation démarré")
     app.run(host="0.0.0.0", port=port, debug=False)
