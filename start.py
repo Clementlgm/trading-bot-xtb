@@ -345,11 +345,4 @@ if __name__ == "__main__":
         
     # Démarre le serveur Flask
     port = int(os.environ.get("PORT", 8080))
-
-    # Démarrer le scheduler AVANT app.run()
-    scheduler = BackgroundScheduler()
-    scheduler.add_job(sync_position_status, 'interval', minutes=5)
-    scheduler.start()
-    logger.info("Planificateur de synchronisation démarré")
-
     app.run(host="0.0.0.0", port=port, debug=False)
