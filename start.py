@@ -351,6 +351,74 @@ def sync_status():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/force_execution", methods=['GET'])
+def force_execution():
+    global bot
+    if not bot:
+        init_bot_if_needed()
+        
+    try:
+        # Force explicitement la valeur à True au lieu de basculer
+        bot.force_execution = True
+        logger.info(f"Force execution set to: {bot.force_execution}")
+        
+        return jsonify({
+            "success": True,
+            "force_execution": bot.force_execution,
+            "message": "Mode d'exécution forcée activé"
+        })
+    except Exception as e:
+        logger.error(f"Exception lors de l'activation du mode forcé: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+@app.route("/check_force_execution", methods=['GET'])
+def check_force_execution():
+    global bot
+    if not bot:
+        init_bot_if_needed()
+        
+    try:
+        # Affiche l'état actuel
+        return jsonify({
+            "success": True,
+            "force_execution": bot.force_execution,
+            "message": f"Mode d'exécution forcée : {'activé' if bot.force_execution else 'désactivé'}"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/force_buy_now", methods=['GET'])
+def force_buy_now():
+    global bot
+    if not bot:
+        init_bot_if_needed()
+        
+    try:
+        logger.info("🔥🔥🔥 FORÇAGE D'ORDRE D'ACHAT IMMÉDIAT")
+        
+        # Vérification explicite de la connexion
+        if not bot.check_connection():
+            logger.error("Pas de connexion à XTB")
+            return jsonify({"error": "Bot non connecté"}), 500
+        
+        # Force un ordre d'achat sans aucune vérification
+        result = bot.execute_trade("BUY")
+        logger.info(f"Résultat de l'ordre d'achat forcé: {result}")
+        
+        return jsonify({
+            "success": result,
+            "message": "Ordre d'achat forcé exécuté"
+        })
+    except Exception as e:
+        logger.error(f"Exception lors du forçage d'achat: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 if __name__ == "__main__":
     try:
         if init_bot_if_needed():
