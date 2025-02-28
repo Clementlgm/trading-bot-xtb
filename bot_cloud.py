@@ -273,9 +273,15 @@ class XTBTradingBot:
            return {}
 
    def execute_trade(self, signal):
-    if self.check_trade_status():
+    """
+    Fonction modifiée pour exécuter un trade en ignorant les vérifications 
+    de position ouverte lorsque force_execution est activé
+    """
+    # Si force_execution est false, vérifiez si une position est déjà ouverte
+    if not self.force_execution and self.check_trade_status():
         logger.info("Position déjà ouverte. Pas de nouveau trade.")
         return False
+        
     if not self.check_connection():
         logger.error("Pas de connexion")
         return False
@@ -292,6 +298,41 @@ class XTBTradingBot:
         if ask_price <= 0 or bid_price <= 0 or lot_min <= 0:
             logger.error(f"Valeurs invalides pour le trade: ask={ask_price}, bid={bid_price}, lot_min={lot_min}")
             return False
+
+        # Forcer la fermeture des positions existantes si force_execution est activé
+        if self.force_execution and self.position_open:
+            logger.info("🔥 FERMETURE DES POSITIONS EXISTANTES AVANT NOUVEL ORDRE")
+            try:
+                # Code pour fermer les positions existantes
+                cmd = {
+                    "command": "getTrades",
+                    "arguments": {
+                        "openedOnly": True
+                    }
+                }
+                response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+                
+                if response and 'returnData' in response:
+                    for trade in response['returnData']:
+                        close_cmd = {
+                            "command": "tradeTransaction",
+                            "arguments": {
+                                "tradeTransInfo": {
+                                    "cmd": 0 if trade.get('cmd') == 1 else 1,  # Inverse de la position originale
+                                    "customComment": "Close Forcé",
+                                    "order": trade.get('order', 0),
+                                    "price": bid_price if trade.get('cmd') == 0 else ask_price,
+                                    "symbol": trade.get('symbol'),
+                                    "type": 2,  # Type 2 = Fermeture
+                                    "volume": trade.get('volume')
+                                }
+                            }
+                        }
+                        logger.info(f"Fermeture de la position: {json.dumps(close_cmd, indent=2)}")
+                        close_response = self.client.commandExecute("tradeTransaction", close_cmd["arguments"])
+                        logger.info(f"Réponse fermeture: {json.dumps(close_response, indent=2)}")
+            except Exception as e:
+                logger.error(f"Erreur lors de la fermeture des positions: {str(e)}")
 
         trade_cmd = {
             "command": "tradeTransaction",
@@ -312,13 +353,13 @@ class XTBTradingBot:
             }
         }
 
-        logger.info(f"Envoi ordre: {json.dumps(trade_cmd, indent=2)}")
+        logger.info(f"Envoi ordre forcé: {json.dumps(trade_cmd, indent=2)}")
         response = self.client.commandExecute('tradeTransaction', trade_cmd['arguments'])
         logger.info(f"Réponse trade complète: {json.dumps(response, indent=2)}")
         
         if response and response.get('status'):
             order_id = response.get('returnData', {}).get('order')
-            logger.info(f"Trade exécuté avec succès, order_id: {order_id}")
+            logger.info(f"🎯 Trade exécuté avec succès, order_id: {order_id}")
             
             # Vérification immédiate pour confirmer l'état
             time.sleep(1)  # Attente courte pour que l'ordre soit traité
@@ -367,47 +408,57 @@ class XTBTradingBot:
             logger.error("Pas de connexion à XTB")
             return False
         
-        # Vérification stricte des positions au début de chaque cycle
+        # Récupération des données historiques et calcul des indicateurs
+        df = self.get_historical_data()
+        if df is None:
+            logger.error("Impossible de récupérer les données historiques")
+            return False
+            
+        df = self.calculate_indicators(df)
+        if df is None:
+            logger.error("Erreur dans le calcul des indicateurs")
+            return False
+            
+        # Analyse de la dernière bougie
+        last_row = df.iloc[-1]
+        logger.info(f"""
+        Analyse pour décision de trading:
+        - Prix actuel: {last_row['close']}
+        - SMA20: {last_row['SMA20']}
+        - SMA50: {last_row['SMA50']}
+        - RSI: {last_row['RSI']}
+        - Force execution: {self.force_execution}
+        """)
+        
+        # Vérification des positions actuelles
         has_positions = self.check_trade_status()
         
-        if has_positions:
-            logger.info("📊 En attente de clôture des positions actives...")
-            return True  # Indique que tout va bien, mais on attend
+        # Si le mode d'exécution forcée est activé et les conditions principales sont bonnes,
+        # on exécute un trade même si on a déjà des positions
+        if self.force_execution:
+            # Vérification des conditions principales
+            buy_conditions = last_row['SMA20'] > last_row['SMA50'] and last_row['RSI'] < 70
+            
+            if buy_conditions:
+                logger.info("🔥 CONDITIONS FAVORABLES DÉTECTÉES AVEC MODE FORCÉ ACTIVÉ")
+                
+                # Si le mode forcé est actif, on exécute le trade même s'il y a des positions ouvertes
+                result = self.execute_trade("BUY")
+                logger.info(f"Résultat de l'ordre forcé: {result}")
+                return result
         
-        # Si aucune position n'est ouverte, recherche de nouvelles opportunités
-        df = self.get_historical_data()
-        if df is not None:
-            df = self.calculate_indicators(df)
-            if df is not None:
-                # Loggez toutes les valeurs importantes
-                last_row = df.iloc[-1]
-                logger.info(f"""
-                Analyse pour décision de trading:
-                - Prix actuel: {last_row['close']}
-                - SMA20: {last_row['SMA20']}
-                - SMA50: {last_row['SMA50']}
-                - RSI: {last_row['RSI']}
-                """)
-                
-                # Si les conditions principales sont bonnes, forcer un trade BUY même sans signal complet
-                if last_row['SMA20'] > last_row['SMA50'] and last_row['RSI'] < 70:
-                    signal = "BUY"
-                    logger.info("🔥 FORÇAGE DE TRADE - Conditions principales favorables")
-                else:
-                    signal = self.check_trading_signals(df)
-                
-                if signal:
-                    logger.info(f"🎯 Signal détecté: {signal}")
-                    
-                    # Double vérification des positions
-                    if self.check_trade_status():
-                        logger.info("Position détectée après vérification, pas de nouveau trade")
-                        return True
-                    
-                    # Exécution du trade
-                    result = self.execute_trade(signal)
-                    logger.info(f"Résultat de l'ordre automatique: {result}")
-                    return result
+        # Mode normal (non forcé)
+        elif not has_positions:
+            # Vérification du signal
+            signal = self.check_trading_signals(df)
+            
+            if signal:
+                logger.info(f"🎯 Signal détecté en mode normal: {signal}")
+                result = self.execute_trade(signal)
+                logger.info(f"Résultat de l'ordre normal: {result}")
+                return result
+        else:
+            logger.info("📊 En attente de clôture des positions actives (mode normal)...")
         
         return True
     except Exception as e:
