@@ -402,27 +402,39 @@ class XTBTradingBot:
         self.position_open = False
         return False 
     
-   def run_strategy(self):
+   def enhanced_run_strategy(self):
+    """
+    Version améliorée de run_strategy avec meilleure journalisation et correction des problèmes
+    """
     try:
-        if not self.check_connection():
-            logger.error("Pas de connexion à XTB")
-            return False
+        logger.info("========== DÉBUT D'EXÉCUTION DE STRATÉGIE ==========")
         
-        # Récupération des données historiques et calcul des indicateurs
+        # 1. Vérifier la connexion
+        if not self.check_connection():
+            logger.error("❌ Pas de connexion à XTB")
+            return False
+        logger.info("✅ Connexion XTB OK")
+        
+        # 2. Récupérer les données historiques
+        logger.info("🔄 Récupération des données historiques...")
         df = self.get_historical_data()
         if df is None:
-            logger.error("Impossible de récupérer les données historiques")
+            logger.error("❌ Impossible de récupérer les données historiques")
             return False
-            
+        logger.info(f"✅ Données historiques récupérées: {len(df)} périodes")
+        
+        # 3. Calculer les indicateurs
+        logger.info("🔄 Calcul des indicateurs...")
         df = self.calculate_indicators(df)
         if df is None:
-            logger.error("Erreur dans le calcul des indicateurs")
+            logger.error("❌ Erreur dans le calcul des indicateurs")
             return False
-            
-        # Analyse de la dernière bougie
+        logger.info("✅ Indicateurs calculés")
+        
+        # 4. Analyser la dernière bougie
         last_row = df.iloc[-1]
         logger.info(f"""
-        Analyse pour décision de trading:
+        📊 ANALYSE POUR DÉCISION DE TRADING:
         - Prix actuel: {last_row['close']}
         - SMA20: {last_row['SMA20']}
         - SMA50: {last_row['SMA50']}
@@ -430,37 +442,124 @@ class XTBTradingBot:
         - Force execution: {self.force_execution}
         """)
         
-        # Vérification des positions actuelles
-        has_positions = self.check_trade_status()
+        # 5. Vérifier les conditions principales
+        sma_condition = last_row['SMA20'] > last_row['SMA50']
+        rsi_condition = last_row['RSI'] < 70
+        price_condition = last_row['close'] > last_row['SMA20']
         
-        # Si le mode d'exécution forcée est activé et les conditions principales sont bonnes,
-        # on exécute un trade même si on a déjà des positions
-        if self.force_execution:
-            # Vérification des conditions principales
-            buy_conditions = last_row['SMA20'] > last_row['SMA50'] and last_row['RSI'] < 70
+        logger.info(f"""
+        🔍 CONDITIONS DE TRADING:
+        - SMA20 > SMA50: {sma_condition}
+        - RSI < 70: {rsi_condition}
+        - Prix > SMA20: {price_condition}
+        - Signal principal: {"ACHETER" if sma_condition and rsi_condition else "ATTENDRE"}
+        """)
+        
+        # 6. Vérifier les positions actuelles
+        logger.info("🔄 Vérification des positions ouvertes...")
+        has_positions = False
+        try:
+            cmd = {
+                "command": "getTrades",
+                "arguments": {
+                    "openedOnly": True
+                }
+            }
+            response = self.client.commandExecute(cmd["command"], cmd["arguments"])
             
-            if buy_conditions:
-                logger.info("🔥 CONDITIONS FAVORABLES DÉTECTÉES AVEC MODE FORCÉ ACTIVÉ")
-                
-                # Si le mode forcé est actif, on exécute le trade même s'il y a des positions ouvertes
-                result = self.execute_trade("BUY")
-                logger.info(f"Résultat de l'ordre forcé: {result}")
-                return result
+            if response and 'returnData' in response:
+                positions = response['returnData']
+                has_positions = len(positions) > 0
+                self.position_open = has_positions
+                logger.info(f"✅ Positions ouvertes: {has_positions} ({len(positions)} positions)")
+            else:
+                logger.warning("⚠️ Pas de réponse claire sur les positions")
+                self.position_open = False
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de la vérification des positions: {str(e)}")
+            # En cas d'erreur, on suppose qu'il n'y a pas de position pour éviter le blocage
+            self.position_open = False
         
-        # Mode normal (non forcé)
+        # 7. Décision de trading
+        execute_trade = False
+        trade_reason = ""
+        
+        # Si le mode d'exécution forcée est activé et les conditions principales sont bonnes
+        if self.force_execution and sma_condition and rsi_condition:
+            execute_trade = True
+            trade_reason = "Mode forcé actif + Conditions principales favorables"
+            logger.info("🔥 DÉCISION: FORCER ACHAT - Mode forcé actif et conditions favorables")
+        # En mode normal, vérifier le signal complet
         elif not has_positions:
-            # Vérification du signal
-            signal = self.check_trading_signals(df)
+            signal = None
+            try:
+                signal = self.check_trading_signals(df)
+            except Exception as e:
+                logger.error(f"❌ Erreur lors de la vérification des signaux: {str(e)}")
             
-            if signal:
-                logger.info(f"🎯 Signal détecté en mode normal: {signal}")
-                result = self.execute_trade(signal)
-                logger.info(f"Résultat de l'ordre normal: {result}")
-                return result
+            if signal == "BUY":
+                execute_trade = True
+                trade_reason = "Signal d'achat détecté en mode normal"
+                logger.info("🎯 DÉCISION: ACHAT - Signal d'achat détecté")
+            else:
+                logger.info(f"🔍 DÉCISION: ATTENDRE - Pas de signal d'achat ({signal})")
         else:
-            logger.info("📊 En attente de clôture des positions actives (mode normal)...")
+            logger.info("📊 DÉCISION: ATTENDRE - Positions déjà ouvertes")
         
+        # 8. Exécution du trade si décidé
+        if execute_trade:
+            logger.info(f"🔄 Exécution d'un ordre d'achat ({trade_reason})...")
+            try:
+                # Vérifier l'état du compte avant d'exécuter
+                account_status = self.check_account_status()
+                if account_status:
+                    logger.info(f"💰 État du compte: Balance={account_status.get('balance')}, Marge={account_status.get('margin')}")
+                
+                # Forcer la fermeture des positions existantes si nécessaire
+                if has_positions and self.force_execution:
+                    logger.info("🔄 Fermeture des positions existantes avant nouvel ordre...")
+                    try:
+                        for position in response['returnData']:
+                            close_cmd = {
+                                "command": "tradeTransaction",
+                                "arguments": {
+                                    "tradeTransInfo": {
+                                        "cmd": 0 if position.get('cmd') == 1 else 1,
+                                        "customComment": "Fermeture avant nouvel ordre",
+                                        "order": position.get('order', 0),
+                                        "price": position.get('close_price', 0),
+                                        "symbol": position.get('symbol'),
+                                        "type": 2,  # Type 2 = Fermeture
+                                        "volume": position.get('volume')
+                                    }
+                                }
+                            }
+                            close_response = self.client.commandExecute("tradeTransaction", close_cmd["arguments"])
+                            logger.info(f"🔄 Réponse fermeture: {json.dumps(close_response, indent=2)}")
+                            time.sleep(1)  # Attendre entre les fermetures
+                    except Exception as e:
+                        logger.error(f"❌ Erreur lors de la fermeture des positions: {str(e)}")
+                
+                # Exécuter le nouveau trade
+                result = self.execute_trade("BUY")
+                logger.info(f"{'✅' if result else '❌'} Résultat de l'ordre: {result}")
+                return result
+            except Exception as e:
+                logger.error(f"❌ Exception lors de l'exécution du trade: {str(e)}")
+                return False
+        
+        logger.info("========== FIN D'EXÉCUTION DE STRATÉGIE ==========")
         return True
     except Exception as e:
-        logger.error(f"Erreur critique dans run_strategy: {str(e)}")
+        logger.error(f"❌ ERREUR CRITIQUE dans run_strategy: {str(e)}")
         return False
+
+   # Application de cette fonction au bot
+   def apply_enhanced_strategy(bot):
+        """
+        Remplace la méthode run_strategy du bot par la version améliorée
+        """
+        import types
+        bot.run_strategy = types.MethodType(enhanced_run_strategy, bot)
+        logger.info("✅ Stratégie améliorée appliquée au bot")
+        return True
