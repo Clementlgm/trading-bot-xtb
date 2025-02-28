@@ -595,6 +595,28 @@ def debug_advanced():
             "message": str(e)
         }), 500
 
+@app.route("/fix_strategy", methods=['GET'])
+def fix_strategy():
+    global bot
+    if not bot:
+        init_bot_if_needed()
+        
+    try:
+        apply_enhanced_strategy(bot)
+        logger.info("🔧 Stratégie améliorée appliquée manuellement")
+        
+        return jsonify({
+            "success": True,
+            "message": "Stratégie améliorée appliquée",
+            "force_execution": bot.force_execution
+        })
+    except Exception as e:
+        logger.error(f"Exception lors de l'application de la stratégie améliorée: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
 if __name__ == "__main__":
     try:
         if init_bot_if_needed():
