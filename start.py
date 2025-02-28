@@ -82,6 +82,7 @@ def init_bot_if_needed():
 def run_trading_thread():
     logger.info("Démarrage du thread de trading")
     first_run = True
+    retry_count = 0
     while True:
         try:
             with bot_lock:
@@ -92,16 +93,28 @@ def run_trading_thread():
                         bot.execute_trade("BUY")
                         first_run = False
                     else:
+                        # Exécute la stratégie et force une action si nécessaire
                         success = bot.run_strategy()
+                        
+                        # Si pas de succès après plusieurs essais, force un ordre d'achat
                         if not success:
-                            logger.warning("Échec de l'exécution de la stratégie")
+                            retry_count += 1
+                            logger.warning(f"Échec de l'exécution de la stratégie (essai {retry_count})")
+                            
+                            if retry_count >= 3 and not bot.position_open:
+                                logger.info("⚠️ FORÇAGE D'ORDRE APRÈS ÉCHECS RÉPÉTÉS")
+                                bot.execute_trade("BUY")
+                                retry_count = 0
+                        else:
+                            retry_count = 0
                 else:
                     if init_bot_if_needed():
                         logger.info("Bot réinitialisé avec succès")
                     else:
                         logger.error("Échec de la réinitialisation")
                         time.sleep(30)
-            time.sleep(60)
+            # Réduire l'intervalle d'exécution pour être plus réactif
+            time.sleep(30)
         except Exception as e:
             logger.error(f"Erreur dans le thread de trading: {str(e)}")
             time.sleep(10)
@@ -128,10 +141,6 @@ def status():
             "last_check": bot_status.get("last_check"),
             "account_info": bot.check_account_status() if is_connected else None
         })
-
-from flask import Flask, jsonify
-import json
-import logging
 
 @app.route("/test_trade", methods=['GET'])
 def test_trade():
@@ -240,7 +249,8 @@ def debug_bot():
                 "symbol": bot.symbol,
                 "timeframe": bot.timeframe,
                 "position_open": bot.position_open,
-                "current_order_id": bot.current_order_id
+                "current_order_id": bot.current_order_id,
+                "force_execution": bot.force_execution
             },
             "market_data": {
                 "last_price": float(last_row['close']),
@@ -249,11 +259,12 @@ def debug_bot():
                 "rsi": float(last_row['RSI'])
             },
             "trading_conditions": {
-                "sma_condition": str(sma_condition),  # Conversion en string
-                "rsi_condition": str(rsi_condition),  # Conversion en string
-                "price_condition": str(price_condition),  # Conversion en string
-                "signal_generated": str(signal is not None),  # Conversion en string
-                "signal_type": signal
+                "sma_condition": str(sma_condition),
+                "rsi_condition": str(rsi_condition),
+                "price_condition": str(price_condition),
+                "signal_generated": str(signal is not None),
+                "signal_type": signal,
+                "would_force_trade": str(sma_condition and rsi_condition)
             },
             "account_status": account_info,
             "position_status": position_status,
@@ -282,11 +293,11 @@ def force_trade():
         if not bot.check_connection():
             return jsonify({"error": "Bot non connecté"}), 500
             
-        # Vérifie s'il y a des positions ouvertes
-        if bot.check_trade_status():
-            return jsonify({"error": "Position déjà ouverte"}), 400
+        # Vérifie s'il y a des positions ouvertes - Suppression de cette vérification pour forcer le trade
+        # if bot.check_trade_status():
+        #     return jsonify({"error": "Position déjà ouverte"}), 400
             
-        # Force un ordre d'achat
+        # Force un ordre d'achat sans vérification préalable
         result = bot.execute_trade("BUY")
         logger.info(f"Résultat de l'ordre forcé via API: {result}")
         
@@ -301,35 +312,11 @@ def force_trade():
             "error": str(e)
         }), 500
 
-@app.route("/sync_status", methods=['GET'])
-def sync_status():
+@app.route("/toggle_force_execution", methods=['GET'])
+def toggle_force_execution():
     global bot
     if not bot:
         init_bot_if_needed()
         
     try:
-        has_positions = bot.check_trade_status()
-        return jsonify({
-            "success": True,
-            "position_open": has_positions,
-            "message": "État synchronisé",
-            "previous_state": bot.position_open
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-if __name__ == "__main__":
-    try:
-        if init_bot_if_needed():
-            logger.info("Bot initialisé avec succès, démarrage du thread de trading...")
-            trading_thread = Thread(target=run_trading_thread, daemon=True)
-            trading_thread.start()
-            logger.info("Thread de trading démarré avec succès")
-        else:
-            logger.error("Échec de l'initialisation du bot")
-    except Exception as e:
-        logger.error(f"Erreur lors du démarrage: {str(e)}")
-        
-    # Démarre le serveur Flask
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False)
+        #
