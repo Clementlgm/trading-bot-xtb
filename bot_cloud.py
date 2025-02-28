@@ -48,6 +48,8 @@ class XTBTradingBot:
        self.reconnect_interval = 60
        self.min_volume = 0.001
        self.risk_percentage = 0.01
+       # Flag pour forcer l'exécution des trades quand tout est au vert
+       self.force_execution = True
 
    def connect(self):
     try:
@@ -248,6 +250,11 @@ class XTBTradingBot:
     - RSI: {last_row['RSI']} {'<' if signal_type == 'BUY' else '>'} {70 if signal_type == 'BUY' else 30}
     """)
     
+    # Si toutes les conditions sont presque remplies, forcer un signal d'achat
+    if self.force_execution and buy_sma_condition and buy_rsi_condition:
+        logger.info("🔥 FORÇAGE DE SIGNAL D'ACHAT - Conditions proches")
+        return "BUY"
+    
     return signal_type
 
     
@@ -291,7 +298,7 @@ class XTBTradingBot:
             "arguments": {
                 "tradeTransInfo": {
                     "cmd": 0 if signal == "BUY" else 1,
-                    "customComment": "Bot Trade",
+                    "customComment": "Bot Trade Forcé",
                     "expiration": 0,
                     "offset": 0,
                     "order": 0,
@@ -312,18 +319,7 @@ class XTBTradingBot:
         if response and response.get('status'):
             order_id = response.get('returnData', {}).get('order')
             logger.info(f"Trade exécuté avec succès, order_id: {order_id}")
-            self.position_open = True
-            self.current_order_id = order_id
-            return True
             
-        error_msg = response.get('errorDescr', 'Erreur inconnue') if response else 'Pas de réponse'
-        logger.error(f"Échec du trade: {error_msg}")
-        return False
-
-        if response and response.get('status'):
-            order_id = response.get('returnData', {}).get('order')
-            logger.info(f"Trade exécuté avec succès, order_id: {order_id}")
-    
             # Vérification immédiate pour confirmer l'état
             time.sleep(1)  # Attente courte pour que l'ordre soit traité
             has_positions = self.check_trade_status()
@@ -332,6 +328,10 @@ class XTBTradingBot:
             self.position_open = True
             self.current_order_id = order_id
             return True
+            
+        error_msg = response.get('errorDescr', 'Erreur inconnue') if response else 'Pas de réponse'
+        logger.error(f"Échec du trade: {error_msg}")
+        return False
        
     except Exception as e:
         logger.error(f"Exception lors de l'exécution du trade: {str(e)}")
@@ -389,7 +389,12 @@ class XTBTradingBot:
                 - RSI: {last_row['RSI']}
                 """)
                 
-                signal = self.check_trading_signals(df)
+                # Si les conditions principales sont bonnes, forcer un trade BUY même sans signal complet
+                if last_row['SMA20'] > last_row['SMA50'] and last_row['RSI'] < 70:
+                    signal = "BUY"
+                    logger.info("🔥 FORÇAGE DE TRADE - Conditions principales favorables")
+                else:
+                    signal = self.check_trading_signals(df)
                 
                 if signal:
                     logger.info(f"🎯 Signal détecté: {signal}")
