@@ -158,7 +158,7 @@ class XTBTradingBot:
                 for col in ['close', 'open', 'high', 'low']:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
                     # Conversion spécifique pour EURUSD
-                    if self.symbol == 'EURUSD':
+                    if self.symbol == 'ETHEREUM':
                         df[col] = (df[col] + 10000) / 100000  # Correction pour les valeurs négatives
                     else:
                         df[col] = df[col] / 10000
