@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 
 # Configuration - Update these with your actual endpoint
-BASE_URL = "http://localhost:8080"  # Change to your actual bot URL
+BASE_URL = "https://trading-bot-642630404413.europe-west9.run.app"  # Change to your actual bot URL
 ITERATIONS = 5
 DELAY = 30  # seconds between checks
 
