@@ -31,7 +31,7 @@ except:
 load_dotenv()
 
 class XTBTradingBot:
-   def __init__(self, symbol='ETHEREUM', timeframe='1h'):
+   def __init__(self, symbol='EURUSD', timeframe='1h'):
        load_dotenv()
        self.userId = os.getenv('XTB_USER_ID') 
        self.password = os.getenv('XTB_PASSWORD') 
@@ -158,7 +158,7 @@ class XTBTradingBot:
                 for col in ['close', 'open', 'high', 'low']:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
                     # Conversion spécifique pour EURUSD
-                    if self.symbol == 'ETHEREUM':
+                    if self.symbol == 'EURUSD':
                         df[col] = (df[col] + 10000) / 100000  # Correction pour les valeurs négatives
                     else:
                         df[col] = df[col] / 10000
