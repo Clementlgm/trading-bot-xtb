@@ -80,7 +80,7 @@ def init_bot_if_needed():
                 logger.error("Identifiants XTB manquants")
                 return False
                 
-            bot = XTBTradingBot(symbol='EURUSD', timeframe='1m')
+            bot = XTBTradingBot(symbol='EURUSD', timeframe='1h')
             if not bot.connect():
                 logger.error("Échec de la connexion initiale")
                 return False
