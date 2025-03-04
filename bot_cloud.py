@@ -214,15 +214,20 @@ class XTBTradingBot:
         return None
 
    def check_trading_signals(self, df):
-    def check_trading_signals(self, df):
+    if len(df) < 50:
+        logger.info("⚠️ Pas assez de données")
+        return None
+            
+    last_row = df.iloc[-1]
+    previous_row = df.iloc[-2] if len(df) > 1 else last_row
+    
     # Ajout d'une tolérance plus grande
     sma_tolerance = 0.0002
     
     # Conditions pour l'achat
     buy_sma_condition = last_row['SMA20'] + sma_tolerance >= last_row['SMA50']
-    
-    # OU ignorer complètement cette condition temporairement 
-    # buy_sma_condition = True  # Forcer cette condition à True pour tests
+    buy_price_condition = last_row['close'] > last_row['SMA20'] - sma_tolerance
+    buy_rsi_condition = last_row['RSI'] < 70
     
     # Conditions pour la vente
     sell_sma_condition = last_row['SMA20'] < last_row['SMA50']
@@ -246,27 +251,7 @@ class XTBTradingBot:
     logger.info(f"""
     =================================
     ANALYSE DE SIGNAL DE TRADING:
-    ---------------------------------
-    CONDITIONS ACTUELLES:
-    - Prix: {last_row['close']:.5f}
-    - SMA20: {last_row['SMA20']:.5f} (Tendance: {sma20_trend})
-    - SMA50: {last_row['SMA50']:.5f} (Tendance: {sma50_trend})
-    - RSI: {last_row['RSI']:.2f}
-    
-    ANALYSE SIGNAL ACHAT:
-    - Condition SMA (SMA20 > SMA50): {buy_sma_condition} ({last_row['SMA20']:.5f} {'>' if buy_sma_condition else '<='} {last_row['SMA50']:.5f})
-    - Condition Prix (Prix > SMA20): {buy_price_condition} ({last_row['close']:.5f} {'>' if buy_price_condition else '<='} {last_row['SMA20']:.5f})
-    - Condition RSI (RSI < 70): {buy_rsi_condition} ({last_row['RSI']:.2f} {'<' if buy_rsi_condition else '>='} 70)
-    - Signal ACHAT généré: {buy_signal}
-    
-    ANALYSE SIGNAL VENTE:
-    - Condition SMA (SMA20 < SMA50): {sell_sma_condition} ({last_row['SMA20']:.5f} {'<' if sell_sma_condition else '>='} {last_row['SMA50']:.5f})
-    - Condition Prix (Prix < SMA20): {sell_price_condition} ({last_row['close']:.5f} {'<' if sell_price_condition else '>='} {last_row['SMA20']:.5f})
-    - Condition RSI (RSI > 30): {sell_rsi_condition} ({last_row['RSI']:.2f} {'>' if sell_rsi_condition else '<='} 30)
-    - Signal VENTE généré: {sell_signal}
-    
-    DÉCISION: {signal_type if signal_type else "AUCUN SIGNAL"}
-    =================================
+    [détails du log]
     """)
     
     return signal_type
