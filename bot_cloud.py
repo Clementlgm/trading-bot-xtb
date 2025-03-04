@@ -214,19 +214,15 @@ class XTBTradingBot:
         return None
 
    def check_trading_signals(self, df):
-    if len(df) < 50:
-        logger.info("⚠️ Pas assez de données")
-        return None
-            
-    last_row = df.iloc[-1]
-    # Définir previous_row correctement
-    previous_row = df.iloc[-2] if len(df) > 1 else last_row
+    def check_trading_signals(self, df):
+    # Ajout d'une tolérance plus grande
+    sma_tolerance = 0.0002
     
-    # Conditions pour l'achat avec tolérance
-    sma_tolerance = 0.00005
-    buy_sma_condition = last_row['SMA20'] + sma_tolerance > last_row['SMA50']
-    buy_price_condition = last_row['close'] > last_row['SMA20'] - sma_tolerance
-    buy_rsi_condition = last_row['RSI'] < 70
+    # Conditions pour l'achat
+    buy_sma_condition = last_row['SMA20'] + sma_tolerance >= last_row['SMA50']
+    
+    # OU ignorer complètement cette condition temporairement 
+    # buy_sma_condition = True  # Forcer cette condition à True pour tests
     
     # Conditions pour la vente
     sell_sma_condition = last_row['SMA20'] < last_row['SMA50']
