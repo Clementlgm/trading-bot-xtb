@@ -215,18 +215,15 @@ class XTBTradingBot:
 
    def check_trading_signals(self, df):
     if len(df) < 50:
-        logger.info("⚠️ Pas assez de données")
+        logger.info("⚠️ Pas assez de données pour générer un signal (minimum 50 périodes)")
         return None
             
     last_row = df.iloc[-1]
     previous_row = df.iloc[-2] if len(df) > 1 else last_row
     
-    # Ajout d'une tolérance plus grande
-    sma_tolerance = 0.0002
-    
     # Conditions pour l'achat
-    buy_sma_condition = last_row['SMA20'] + sma_tolerance >= last_row['SMA50']
-    buy_price_condition = last_row['close'] > last_row['SMA20'] - sma_tolerance
+    buy_sma_condition = last_row['SMA20'] > last_row['SMA50']
+    buy_price_condition = last_row['close'] > last_row['SMA20']
     buy_rsi_condition = last_row['RSI'] < 70
     
     # Conditions pour la vente
@@ -251,10 +248,45 @@ class XTBTradingBot:
     logger.info(f"""
     =================================
     ANALYSE DE SIGNAL DE TRADING:
-    [détails du log]
+    ---------------------------------
+    CONDITIONS ACTUELLES:
+    - Prix: {last_row['close']:.5f}
+    - SMA20: {last_row['SMA20']:.5f} (Tendance: {sma20_trend})
+    - SMA50: {last_row['SMA50']:.5f} (Tendance: {sma50_trend})
+    - RSI: {last_row['RSI']:.2f}
+    
+    ANALYSE SIGNAL ACHAT:
+    - Condition SMA (SMA20 > SMA50): {buy_sma_condition} ({last_row['SMA20']:.5f} {'>' if buy_sma_condition else '<='} {last_row['SMA50']:.5f})
+    - Condition Prix (Prix > SMA20): {buy_price_condition} ({last_row['close']:.5f} {'>' if buy_price_condition else '<='} {last_row['SMA20']:.5f})
+    - Condition RSI (RSI < 70): {buy_rsi_condition} ({last_row['RSI']:.2f} {'<' if buy_rsi_condition else '>='} 70)
+    - Signal ACHAT généré: {buy_signal}
+    
+    ANALYSE SIGNAL VENTE:
+    - Condition SMA (SMA20 < SMA50): {sell_sma_condition} ({last_row['SMA20']:.5f} {'<' if sell_sma_condition else '>='} {last_row['SMA50']:.5f})
+    - Condition Prix (Prix < SMA20): {sell_price_condition} ({last_row['close']:.5f} {'<' if sell_price_condition else '>='} {last_row['SMA20']:.5f})
+    - Condition RSI (RSI > 30): {sell_rsi_condition} ({last_row['RSI']:.2f} {'>' if sell_rsi_condition else '<='} 30)
+    - Signal VENTE généré: {sell_signal}
+    
+    DÉCISION: {signal_type if signal_type else "AUCUN SIGNAL"}
+    =================================
     """)
     
     return signal_type
+
+    
+   def get_symbol_info(self):
+       try:
+           cmd = {
+               "command": "getSymbol",
+               "arguments": {
+                   "symbol": self.symbol
+               }
+           }
+           response = self.client.commandExecute(cmd["command"], cmd["arguments"])
+           return response.get('returnData', {}) if response else {}
+       except Exception as e:
+           logging.error(f"❌ Erreur lors de la récupération des infos du symbole: {str(e)}")
+           return {}
 
    def execute_trade(self, signal):
     if self.check_trade_status():
@@ -306,14 +338,28 @@ class XTBTradingBot:
             self.position_open = True
             self.current_order_id = order_id
             return True
-        else:
-            error_msg = response.get('errorDescr', 'Erreur inconnue') if response else 'Pas de réponse'
-            logger.error(f"Échec du trade: {error_msg}")
-            return False
+            
+        error_msg = response.get('errorDescr', 'Erreur inconnue') if response else 'Pas de réponse'
+        logger.error(f"Échec du trade: {error_msg}")
+        return False
+
+        if response and response.get('status'):
+            order_id = response.get('returnData', {}).get('order')
+            logger.info(f"Trade exécuté avec succès, order_id: {order_id}")
+    
+            # Vérification immédiate pour confirmer l'état
+            time.sleep(1)  # Attente courte pour que l'ordre soit traité
+            has_positions = self.check_trade_status()
+            logger.info(f"Vérification après trade: position_open={has_positions}")
+    
+            self.position_open = True
+            self.current_order_id = order_id
+            return True
+       
     except Exception as e:
         logger.error(f"Exception lors de l'exécution du trade: {str(e)}")
         return False
-        
+
    def check_trade_status(self):
     try:
         cmd = {
