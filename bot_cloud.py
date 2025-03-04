@@ -219,11 +219,11 @@ class XTBTradingBot:
         return None
             
     last_row = df.iloc[-1]
+    # Définir previous_row correctement
+    previous_row = df.iloc[-2] if len(df) > 1 else last_row
     
-    # Ajout d'une tolérance pour les comparaisons SMA
+    # Conditions pour l'achat avec tolérance
     sma_tolerance = 0.00005
-    
-    # Conditions pour l'achat
     buy_sma_condition = last_row['SMA20'] + sma_tolerance > last_row['SMA50']
     buy_price_condition = last_row['close'] > last_row['SMA20'] - sma_tolerance
     buy_rsi_condition = last_row['RSI'] < 70
