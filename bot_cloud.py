@@ -307,11 +307,7 @@ class XTBTradingBot:
             self.current_order_id = order_id
             return True
             
-        error_msg = response.get('errorDescr', 'Erreur inconnue') if response else 'Pas de réponse'
-        logger.error(f"Échec du trade: {error_msg}")
-        return False
-
-        if response and response.get('status'):
+        
             order_id = response.get('returnData', {}).get('order')
             logger.info(f"Trade exécuté avec succès, order_id: {order_id}")
     
